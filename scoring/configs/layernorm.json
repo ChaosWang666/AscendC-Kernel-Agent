@@ -1,0 +1,36 @@
+{
+  "operator": "layernorm",
+  "description": "LayerNorm 算子测试配置",
+  "configs": [
+    {
+      "name": "small_fp32",
+      "shape": [32, 1024],
+      "dtype": "fp32",
+      "eps": 1e-5
+    },
+    {
+      "name": "medium_fp32",
+      "shape": [128, 4096],
+      "dtype": "fp32",
+      "eps": 1e-5
+    },
+    {
+      "name": "large_fp32",
+      "shape": [512, 8192],
+      "dtype": "fp32",
+      "eps": 1e-5
+    },
+    {
+      "name": "medium_fp16",
+      "shape": [128, 4096],
+      "dtype": "fp16",
+      "eps": 1e-5
+    },
+    {
+      "name": "medium_bf16",
+      "shape": [128, 4096],
+      "dtype": "bf16",
+      "eps": 1e-5
+    }
+  ]
+}

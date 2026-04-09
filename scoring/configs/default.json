@@ -1,0 +1,31 @@
+{
+  "operator": "add_custom",
+  "description": "默认逐元素算子测试配置",
+  "configs": [
+    {
+      "name": "small_fp32",
+      "shape": [1024],
+      "dtype": "fp32"
+    },
+    {
+      "name": "medium_fp32",
+      "shape": [65536],
+      "dtype": "fp32"
+    },
+    {
+      "name": "large_fp32",
+      "shape": [1048576],
+      "dtype": "fp32"
+    },
+    {
+      "name": "medium_fp16",
+      "shape": [65536],
+      "dtype": "fp16"
+    },
+    {
+      "name": "medium_bf16",
+      "shape": [65536],
+      "dtype": "bf16"
+    }
+  ]
+}

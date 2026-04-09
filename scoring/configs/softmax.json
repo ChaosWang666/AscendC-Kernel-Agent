@@ -1,0 +1,36 @@
+{
+  "operator": "softmax",
+  "description": "Softmax 算子测试配置",
+  "configs": [
+    {
+      "name": "1d_small_fp32",
+      "shape": [1024],
+      "dtype": "fp32",
+      "axis": -1
+    },
+    {
+      "name": "2d_medium_fp32",
+      "shape": [512, 1024],
+      "dtype": "fp32",
+      "axis": -1
+    },
+    {
+      "name": "2d_large_fp32",
+      "shape": [4096, 4096],
+      "dtype": "fp32",
+      "axis": -1
+    },
+    {
+      "name": "2d_medium_fp16",
+      "shape": [512, 1024],
+      "dtype": "fp16",
+      "axis": -1
+    },
+    {
+      "name": "2d_medium_bf16",
+      "shape": [512, 1024],
+      "dtype": "bf16",
+      "axis": -1
+    }
+  ]
+}
