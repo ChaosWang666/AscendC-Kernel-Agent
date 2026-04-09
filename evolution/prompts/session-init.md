@@ -11,7 +11,12 @@
 算子: {{OP_NAME}}
 芯片: {{TARGET_CHIP}}
 当前版本: v{{CURRENT_VERSION}}
-最佳评分: {{BEST_SCORE}} TFLOPS
+最佳评分: {{BEST_SCORE}}
+
+## 工作区
+
+候选目录（可写）: {{CANDIDATE_DIR}}
+基线目录（只读）: {{BASELINE_DIR}}
 
 ## 谱系
 
@@ -25,9 +30,9 @@
 
 1. 分析现状（读取内核代码 + profiling 数据）
 2. 查阅知识库（按需加载 Skills）
-3. 实施优化编辑
+3. 实施优化编辑（仅在候选目录中）
 4. 编译测试
-5. 若通过，运行 `bash scoring/score.sh workspace/ops/{{OP_NAME}} scoring/configs/{{CONFIG}}.json`
+5. 若通过，运行 `bash scoring/score.sh {{CANDIDATE_DIR}} scoring/configs/{{CONFIG}}.json`
 6. 若评分提升，提交 git commit
 
 请开始工作。

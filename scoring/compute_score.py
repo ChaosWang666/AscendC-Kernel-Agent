@@ -6,8 +6,11 @@
     "version": "v23",
     "timestamp": "...",
     "git_commit": "...",
+    "metric_type": "tflops",
     "correctness_total": 1.0,
-    "performance_total_tflops": 856.3,
+    "performance_total": 856.3,
+    "improvement_over_best": "+3.2%",
+    "test_levels_run": ["smoke", "representative", "stress"],
     "configs": [...]
 }
 
@@ -16,6 +19,9 @@
         [--correctness-result <correctness.json>] \
         [--performance-result <performance.json>] \
         [--compile-error <compile.log>] \
+        [--metric-type tflops] \
+        [--best-score <float>] \
+        [--test-levels smoke,representative] \
         --output <score.json>
 """
 
@@ -39,11 +45,39 @@ def get_git_commit() -> str:
 
 
 def geometric_mean(values: list) -> float:
-    """计算几何平均值"""
+    """计算几何平均值（适用于 higher-is-better 指标如 tflops, bandwidth_gbps）"""
     if not values or any(v <= 0 for v in values):
         return 0.0
     log_sum = sum(math.log(v) for v in values)
     return math.exp(log_sum / len(values))
+
+
+def harmonic_mean(values: list) -> float:
+    """计算调和平均值（适用于 lower-is-better 指标如 latency_us）"""
+    if not values or any(v <= 0 for v in values):
+        return 0.0
+    return len(values) / sum(1.0 / v for v in values)
+
+
+def aggregate_performance(values: list, metric_type: str) -> float:
+    """根据指标类型选择合适的聚合方式"""
+    if metric_type == "latency_us":
+        return round(harmonic_mean(values), 2)
+    else:
+        return round(geometric_mean(values), 2)
+
+
+def compute_improvement(new_val: float, best_val: float, metric_type: str) -> str:
+    """计算相对于 best 的改进比例"""
+    if best_val <= 0 or new_val <= 0:
+        return "N/A"
+    if metric_type == "latency_us":
+        # 延迟指标: 越低越好, best/new - 1
+        improvement = best_val / new_val - 1
+    else:
+        # 吞吐指标: 越高越好, new/best - 1
+        improvement = new_val / best_val - 1
+    return f"{improvement:+.1%}"
 
 
 def main():
@@ -52,16 +86,26 @@ def main():
     parser.add_argument("--correctness-result", help="正确性结果 JSON")
     parser.add_argument("--performance-result", help="性能结果 JSON")
     parser.add_argument("--compile-error", help="编译错误日志")
+    parser.add_argument("--metric-type", default="tflops",
+                        help="tflops | bandwidth_gbps | latency_us")
+    parser.add_argument("--best-score", type=float, default=0.0,
+                        help="当前最佳评分（用于计算 improvement）")
+    parser.add_argument("--test-levels", default="",
+                        help="已运行的测试级别（逗号分隔）")
     parser.add_argument("--output", required=True, help="输出评分 JSON")
     args = parser.parse_args()
+
+    test_levels = [l.strip() for l in args.test_levels.split(",") if l.strip()]
 
     score = {
         "version": f"v{args.version}",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "git_commit": get_git_commit(),
+        "metric_type": args.metric_type,
         "correctness_total": 0.0,
-        "performance_total_tflops": 0.0,
-        "improvement_over_prev": "N/A",
+        "performance_total": 0.0,
+        "improvement_over_best": "N/A",
+        "test_levels_run": test_levels,
         "configs": [],
     }
 
@@ -74,6 +118,7 @@ def main():
             error_log = "无法读取编译日志"
 
         score["compile_error"] = error_log
+        score["failure_type"] = "compile"
         with open(args.output, "w") as f:
             json.dump(score, f, indent=2, ensure_ascii=False)
         return
@@ -88,13 +133,17 @@ def main():
         for c in correctness.get("configs", []):
             score["configs"].append({
                 "name": c.get("name", "unknown"),
+                "level": c.get("level", "unknown"),
                 "correctness": c.get("correctness", 0),
                 "max_abs_error": c.get("max_abs_error", 0.0),
                 "max_rel_error": c.get("max_rel_error", 0.0),
+                "mean_abs_error": c.get("mean_abs_error", 0.0),
+                "mismatch_ratio": c.get("mismatch_ratio", 0.0),
             })
 
     # 如果正确性未通过，性能评分为 0
     if score["correctness_total"] < 1.0:
+        score["failure_type"] = "correctness"
         with open(args.output, "w") as f:
             json.dump(score, f, indent=2, ensure_ascii=False)
         return
@@ -104,7 +153,7 @@ def main():
         with open(args.performance_result) as f:
             performance = json.load(f)
 
-        tflops_values = []
+        primary_values = []
         perf_configs = {c.get("name", f"config_{i}"): c
                         for i, c in enumerate(performance.get("configs", []))}
 
@@ -112,20 +161,26 @@ def main():
             name = config["name"]
             if name in perf_configs:
                 pc = perf_configs[name]
-                config["tflops"] = pc.get("tflops", 0.0)
+                config["performance_primary"] = pc.get("performance_primary", 0.0)
                 config["task_duration_us"] = pc.get("task_duration_us", 0.0)
                 config["profiling"] = pc.get("profiling", {})
-                if config["tflops"] > 0:
-                    tflops_values.append(config["tflops"])
+                if config["performance_primary"] > 0:
+                    primary_values.append(config["performance_primary"])
 
-        # 几何平均 TFLOPS
-        score["performance_total_tflops"] = round(geometric_mean(tflops_values), 2)
+        # 聚合性能指标
+        score["performance_total"] = aggregate_performance(primary_values, args.metric_type)
+
+    # 计算相对改进
+    if args.best_score > 0:
+        score["improvement_over_best"] = compute_improvement(
+            score["performance_total"], args.best_score, args.metric_type
+        )
 
     with open(args.output, "w") as f:
         json.dump(score, f, indent=2, ensure_ascii=False)
 
     print(f"评分: correctness={score['correctness_total']}, "
-          f"performance={score['performance_total_tflops']} TFLOPS")
+          f"performance={score['performance_total']} ({args.metric_type})")
 
 
 if __name__ == "__main__":

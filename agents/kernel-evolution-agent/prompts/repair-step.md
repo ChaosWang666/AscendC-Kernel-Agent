@@ -10,7 +10,7 @@
 ```
 
 ### 回归版本
-文件：`workspace/ops/{{OP_NAME}}/{{OP_NAME}}.asc`
+候选目录：`{{CANDIDATE_DIR}}/{{OP_NAME}}.asc`
 
 ### 失败的测试配置
 ```json
@@ -26,12 +26,12 @@
 版本号：v{{LAST_CORRECT_VERSION}}
 可通过以下命令查看：
 ```bash
-git show v{{LAST_CORRECT_VERSION}}:workspace/ops/{{OP_NAME}}/{{OP_NAME}}.asc
+git show v{{LAST_CORRECT_VERSION}}:workspace/runs/{{OP_NAME}}/best/{{OP_NAME}}.asc
 ```
 
 ### 最近的代码变更
 ```bash
-git diff v{{LAST_CORRECT_VERSION}}..HEAD -- workspace/ops/{{OP_NAME}}/
+git diff v{{LAST_CORRECT_VERSION}}..HEAD -- workspace/runs/{{OP_NAME}}/
 ```
 
 ## 任务
@@ -42,7 +42,7 @@ git diff v{{LAST_CORRECT_VERSION}}..HEAD -- workspace/ops/{{OP_NAME}}/
 
 ## 诊断流程
 
-1. 读取 `Knowledage-base/coding-skills/skills/skills/ascendc-precision-debug/SKILL.md` 的诊断决策树
+1. 读取 `Knowledge-base/coding-skills/skills/skills/ascendc-precision-debug/SKILL.md` 的诊断决策树
 2. 对比失败输出 vs golden 数据的误差模式：
    - 全零输出 → Pipeline 同步缺失
    - 大量 NaN/Inf → 精度溢出或除零
@@ -57,5 +57,6 @@ git diff v{{LAST_CORRECT_VERSION}}..HEAD -- workspace/ops/{{OP_NAME}}/
 
 ## 约束
 
+- 所有编辑在候选目录 `{{CANDIDATE_DIR}}` 中进行
 - 优先保留性能优化，只回退必要的部分
 - 如果无法在保留优化的前提下修复，可以完整回退到上一个正确版本

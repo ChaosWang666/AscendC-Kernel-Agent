@@ -9,6 +9,20 @@
 - 通过持续的 **Edit-Evaluate-Diagnose** 循环自主优化内核性能
 - 在多日无人干预的运行中，积累数十个经过验证的优化版本
 
+### 1.1.1 非目标
+
+本项目第一阶段**不**追求：
+- 一次性支持任意复杂算子自动生成
+- 在 Attention 等复杂算子上直接达到手写最优性能
+- 无约束地长期自主探索（多日运行留待后续阶段验证）
+- 覆盖所有调用方式（优先支持 Direct Invoke）
+
+第一阶段目标是验证以下**最小闭环**：
+1. 给定一个可定义 golden 的算子规格
+2. Agent 能生成或修改 Ascend C 内核
+3. 评分系统能稳定给出正确性和性能结果
+4. Supervisor 能稳定驱动多轮尝试并保留谱系
+
 ### 1.2 核心理念
 
 借鉴 **AVO（Agentic Variation Operators）论文**（`./AVO-paper/`），核心公式为：
@@ -128,7 +142,7 @@ Layer 3: 88K+ 源文件（参考实现，通过 Grep/Glob 按需检索）
 
 ### 2.4 导航索引文件
 
-创建 3 个索引文件辅助 Agent 快速定位参考代码：
+校准和补充 3 个索引文件（已存在），辅助 Agent 快速定位参考代码：
 
 - `Knowledage-base/INDEX-attention-ops.md`：40+ Attention 算子目录（名称、路径、关键模式）
 - `Knowledage-base/INDEX-api-reference.md`：API 文档按类别索引（算术/归约/数据搬移/缓冲管理/精度转换/同步/比较）
@@ -193,23 +207,36 @@ permission:
 
 ### 3.3 输入/输出接口
 
-**输入：**
+采用**候选工作区模型**：Agent 在隔离的候选目录中工作，不直接修改当前最佳版本。
+
+#### 输入
+
 | 参数 | 说明 | 来源 |
 |------|------|------|
-| `operator_spec` | 算子规格（数学公式、输入输出形状、dtype、目标芯片） | 用户定义 |
-| `current_kernel` | 当前最优内核源码 x_t | `workspace/ops/{op_name}/{op_name}.asc` |
-| `current_score` | 当前评分 f(x_t) | `evolution/scores/v{N}.json` |
-| `lineage_summary` | 谱系摘要：(版本号, 评分, 一句话描述) 列表 | `evolution/state.json` |
-| `directive` | （可选）Supervisor 优化指令 | Supervisor 停滞干预时提供 |
+| `operator_spec_path` | 算子规格文件路径 | `workspace/specs/{op_name}.md` |
+| `baseline_dir` | 当前最佳版本的**只读**目录 | `workspace/runs/{op_name}/best/` |
+| `candidate_dir` | 本轮候选版本的**可写**目录 | `workspace/runs/{op_name}/attempts/step_{N}/` |
+| `lineage_summary` | 谱系摘要（压缩版） | `evolution/state.json` |
+| `directive` | （可选）Supervisor 重定向指令 | Supervisor 停滞干预时生成 |
+| `scoring_config_path` | 评分配置 | `scoring/configs/{op_name}.json` |
 
-**输出：**
-| 产物 | 说明 | 位置 |
-|------|------|------|
-| 内核代码 | 新版本 x_{t+1} | `workspace/ops/{op_name}/{op_name}.asc` |
-| 编译状态 | pass/fail + 错误日志 | Agent 日志 |
-| 测试结果 | 正确性 + 性能 | `evolution/scores/v{N+1}.json` |
-| Git commit | 若通过正确性测试 | git log |
-| 推理日志 | 尝试了什么、失败了什么、成功了什么 | `evolution/logs/step_{N}.md` |
+#### 输出
+
+| 字段 | 说明 |
+|------|------|
+| `status` | `committed` / `rejected` / `failed` / `timeout` |
+| `candidate_dir` | 本轮候选目录路径 |
+| `score_json_path` | 本轮评分结果路径 |
+| `summary` | 一句话总结本轮尝试 |
+| `failure_type` | `compile` / `correctness` / `performance` / `infra` / `timeout`（仅失败时） |
+| `commit_hash` | 成功提交时返回 |
+
+#### 工作区约束
+
+- Agent **不得**直接修改 `best/` 目录
+- 所有编辑仅发生在 `candidate_dir`
+- 只有当候选版本满足提交条件时，Supervisor 才将其晋升为新的 `best/`
+- 推理日志保存到 `evolution/logs/step_{N}.md` 供后续分析
 
 ### 3.4 工作模式
 
@@ -303,6 +330,22 @@ Agent 根据谱系状态自主选择工作模式：
 └─────────────────────────────────────────┘
 ```
 
+### 3.5.1 提交准则
+
+候选版本必须同时满足以下条件才可提交：
+
+1. **正确性门槛**：`correctness_total = 1.0`（全配置通过，不可妥协）
+2. **性能门槛**：主性能指标优于当前 `best`，且超过最小改进阈值
+
+```
+improvement_over_best = primary(candidate) / primary(best) - 1
+improvement_over_best >= min_improvement_ratio   # 默认 0.02 (2%)
+```
+
+**不满足条件的版本永不提交**——`correctness_total < 1.0` 的版本评分为 0，性能未提升的版本标记为 `rejected`。
+
+> 注：第一阶段不保留 sidegrade（正确但未提升）版本作为谱系节点，以降低复杂度。后续阶段可扩展为保留 sidegrade 用于多样性探索。
+
 ### 3.6 Prompt 模板
 
 | 模板文件 | 用途 |
@@ -342,49 +385,87 @@ f(x) = (correctness_total, performance_total)
 
 #### 正确性评分
 
-二值判定，对比 golden 参考数据：
+对每个配置 `config_j`，使用 `allclose` 语义判定：
 
+```python
+pass_j = np.allclose(output, golden, rtol=rtol(dtype), atol=atol(dtype), equal_nan=True)
 ```
-correctness(x, config_j) = 1  若 all(|output - golden| < atol) 且 all(|output - golden|/|golden| < rtol)
-                          = 0  否则
 
 精度阈值（来源：ops-precision-standard）：
-  FP32: rtol=1e-5, atol=1e-5
-  FP16: rtol=1e-3, atol=1e-3
-  BF16: rtol=1e-2, atol=1e-2
 
-correctness_total(x) = sum(correctness(x, config_j)) / n_configs
+| dtype | rtol | atol |
+|-------|------|------|
+| FP32 | 1e-5 | 1e-5 |
+| FP16 | 1e-3 | 1e-3 |
+| BF16 | 1e-2 | 1e-2 |
+
+```
+correctness_total(x) = sum(pass_j for j in all_configs) / n_configs
 ```
 
 **硬性要求：`correctness_total = 1.0`（全部配置通过）才允许提交。** 这是 AVO 的核心原则——正确性不可妥协，不正确的内核评分为 0。
 
+补充要求：
+- 当 golden 中存在 0、接近 0、Inf、NaN 时，按 `allclose` 语义处理，**不**单独做除法形式的相对误差判定
+- 除通过/失败外，同时记录以下诊断指标：
+  - `max_abs_error`
+  - `max_rel_error`（排除 golden=0 的位置）
+  - `mean_abs_error`
+  - `mismatch_ratio`（不通过的元素占比）
+
+**Golden 来源优先级：**
+1. 权威框架参考实现（PyTorch / NumPy 等）
+2. 已验证的 CPU 参考实现
+3. 现有官方样例或参考算子输出
+4. **禁止**使用"待测内核自身输出"生成 golden
+
 #### 性能评分
 
-基于 msprof 采集的 Task Duration，换算为吞吐量：
+性能评分按算子类别定义主指标：
 
+| 算子类别 | 主指标 | 说明 |
+|----------|--------|------|
+| MatMul / Attention 等算力密集型 | TFLOPS | 使用有效 FLOPs / duration |
+| Elementwise / Transpose / 数据搬移型 | GB/s 或 us | 使用有效字节数 / duration 或直接使用时延 |
+| Reduce / Norm 类 | us + 辅助利用率指标 | FLOPs 定义不稳定时以时延为主 |
+
+统一聚合规则：
+- `performance_primary(x, config_j)` 为该算子类别的主指标值
+- `performance_total(x)` 为各配置主指标的几何平均
+- 对外比较采用 `improvement_over_best = primary(x) / primary(best) - 1`
+
+评分配置中需指定：
+```yaml
+metric_type: tflops | bandwidth_gbps | latency_us
+min_improvement_ratio: 0.02   # 最小提升门槛，默认 2%
 ```
-performance(x, config_j) = compute_flops(config_j) / task_duration_seconds(x, config_j)
-
-performance_total(x) = geometric_mean(performance(x, config_j) for j in all_configs)
-```
-
-使用几何平均而非算术平均，确保所有配置均衡优化。
 
 ### 4.2 测试配置矩阵
 
-每个算子类型对应一组 JSON 测试配置：
+测试分**三级**执行，逐级递进：
+
+| 级别 | 目标 | 运行时机 |
+|------|------|---------|
+| `smoke` | 小 shape，快速发现编译和基础功能错误 | 每轮必跑 |
+| `representative` | 典型 shape，判断是否具备实际优化价值 | smoke 通过后运行 |
+| `stress` | 极限 shape / 长序列 / 边界 case，提交前最终验证 | 仅候选版本达到提交门槛时运行 |
 
 **Attention 算子示例：**
 ```json
 {
   "operator": "flash_attention_ascend",
-  "configs": [
-    {"batch": 8, "seq_len": 4096, "heads": 16, "dim": 128, "dtype": "bf16", "causal": true},
-    {"batch": 4, "seq_len": 8192, "heads": 16, "dim": 128, "dtype": "bf16", "causal": true},
-    {"batch": 2, "seq_len": 16384, "heads": 16, "dim": 128, "dtype": "bf16", "causal": true},
-    {"batch": 1, "seq_len": 32768, "heads": 16, "dim": 128, "dtype": "bf16", "causal": true},
-    {"batch": 8, "seq_len": 4096, "heads": 16, "dim": 128, "dtype": "bf16", "causal": false},
-    {"batch": 4, "seq_len": 8192, "heads": 16, "dim": 128, "dtype": "bf16", "causal": false}
+  "smoke": [
+    {"batch": 8, "seq_len": 128, "heads": 16, "dim": 128, "dtype": "bf16", "causal": true},
+    {"batch": 8, "seq_len": 256, "heads": 16, "dim": 128, "dtype": "bf16", "causal": false}
+  ],
+  "representative": [
+    {"batch": 8, "seq_len": 1024, "heads": 16, "dim": 128, "dtype": "bf16", "causal": true},
+    {"batch": 4, "seq_len": 2048, "heads": 16, "dim": 128, "dtype": "bf16", "causal": true},
+    {"batch": 4, "seq_len": 2048, "heads": 16, "dim": 128, "dtype": "bf16", "causal": false}
+  ],
+  "stress": [
+    {"batch": 2, "seq_len": 4096, "heads": 16, "dim": 128, "dtype": "bf16", "causal": true},
+    {"batch": 1, "seq_len": 8192, "heads": 16, "dim": 128, "dtype": "bf16", "causal": true}
   ]
 }
 ```
@@ -393,12 +474,18 @@ performance_total(x) = geometric_mean(performance(x, config_j) for j in all_conf
 ```json
 {
   "operator": "add_custom",
-  "configs": [
+  "smoke": [
     {"shape": [1024], "dtype": "fp32"},
+    {"shape": [1024], "dtype": "fp16"}
+  ],
+  "representative": [
     {"shape": [65536], "dtype": "fp32"},
-    {"shape": [1048576], "dtype": "fp32"},
     {"shape": [65536], "dtype": "fp16"},
     {"shape": [65536], "dtype": "bf16"}
+  ],
+  "stress": [
+    {"shape": [1048576], "dtype": "fp32"},
+    {"shape": [1048576], "dtype": "fp16"}
   ]
 }
 ```
@@ -410,7 +497,7 @@ performance_total(x) = geometric_mean(performance(x, config_j) for j in all_conf
 | `score.sh` | 总编排 | 算子路径 + 配置文件 | 评分 JSON |
 | `compile.sh` | 编译封装 | 算子路径 | 0/1 + 错误日志 |
 | `test_correctness.sh` | 正确性测试 | 算子路径 + 配置 | 逐配置通过/失败 |
-| `test_performance.sh` | 性能测试 | 算子路径 + 配置 | 逐配置 TFLOPS |
+| `test_performance.sh` | 性能测试 | 算子路径 + 配置 | 逐配置主指标值 |
 | `gen_golden.py` | 生成 golden 参考 | 算子规格 + 配置 | golden 数据文件 |
 | `verify_correctness.py` | 对比输出 vs golden | 输出数据 + golden + 阈值 | 通过/失败 + 误差统计 |
 | `compute_score.py` | 聚合评分 | 正确性 + 性能结果 | 最终评分 JSON |
@@ -422,16 +509,21 @@ performance_total(x) = geometric_mean(performance(x, config_j) for j in all_conf
   "version": "v23",
   "timestamp": "2026-04-08T15:30:00Z",
   "git_commit": "abc1234",
+  "metric_type": "tflops",
   "correctness_total": 1.0,
-  "performance_total_tflops": 856.3,
-  "improvement_over_prev": "+3.2%",
+  "performance_total": 856.3,
+  "improvement_over_best": "+3.2%",
+  "test_levels_run": ["smoke", "representative", "stress"],
   "configs": [
     {
-      "name": "b8_s4096_h16_d128_bf16_causal",
+      "name": "b8_s1024_h16_d128_bf16_causal",
+      "level": "representative",
       "correctness": 1,
       "max_abs_error": 0.0023,
       "max_rel_error": 0.0018,
-      "tflops": 823.1,
+      "mean_abs_error": 0.0004,
+      "mismatch_ratio": 0.0,
+      "performance_primary": 823.1,
       "task_duration_us": 142.3,
       "profiling": {
         "vec_ratio": 0.65,
@@ -459,31 +551,39 @@ performance_total(x) = geometric_mean(performance(x, config_j) for j in all_conf
 | Double Buffer 重叠率 | >30% | 10-30% | <10% |
 | Bank Conflict | <5% 总量 | 5-15% | >15% |
 
-### 4.6 流程图
+### 4.6 流程图（分级评分）
 
 ```
 score.sh
   │
   ├── 1. compile.sh
   │     ├── 成功 → 继续
-  │     └── 失败 → 返回 {"correctness_total": 0, "compile_error": "..."}
+  │     └── 失败 → 返回 {"correctness_total": 0, "failure_type": "compile", ...}
   │
   ├── 2. gen_golden.py (若 golden 不存在)
   │     └── 生成参考数据
   │
-  ├── 3. 对每个 config_j:
-  │     ├── 运行内核，收集输出
-  │     └── verify_correctness.py → correctness(x, config_j)
+  ├── 3. smoke correctness
+  │     ├── 通过 → 继续
+  │     └── 失败 → 返回 {"correctness_total": X, "failure_type": "correctness", ...}
   │
-  ├── 4. 若 correctness_total < 1.0:
-  │     └── 返回 {"correctness_total": X, "performance_total_tflops": 0}
+  ├── 4. representative correctness
+  │     ├── 通过 → 继续
+  │     └── 失败 → 返回 {"correctness_total": X, "failure_type": "correctness", ...}
   │
-  ├── 5. 对每个 config_j:
-  │     ├── msprof op --warm-up=10 → 采集性能
-  │     └── 解析 Task Duration → TFLOPS
+  ├── 5. 若 correctness_total < 1.0 → 结束（不进入性能测试）
   │
-  └── 6. compute_score.py → 聚合为最终 JSON
+  ├── 6. representative performance
+  │     └── 计算 improvement_over_best
+  │
+  ├── 7. 若满足候选提交门槛（improvement >= min_improvement_ratio）：
+  │     ├── stress correctness
+  │     └── stress performance
+  │
+  └── 8. compute_score.py → 聚合为最终 JSON
 ```
+
+短路逻辑的目的是加速反馈循环——前期迭代中，大部分候选版本在 smoke 阶段就能快速判定，避免在 stress 配置上浪费时间。
 
 ### 4.7 复用现有资产
 
@@ -534,7 +634,7 @@ supervisor.py (Python 脚本, 长时间运行)
   ├── 启动 → Kernel Evolution Agent (Claude Code 会话)
   │            │── 调用 → scoring/score.sh
   │            │── 读取 → Knowledage-base/
-  │            │── 写入 → workspace/ops/{op_name}/
+  │            │── 写入 → workspace/runs/{op_name}/attempts/step_{N}/
   │            └── 提交 → git commit
   │
   ├── 监控 → 评分历史, git log, 已用时间
@@ -551,12 +651,16 @@ supervisor.py (Python 脚本, 长时间运行)
   "operator_name": "flash_attention_ascend",
   "target_chip": "Ascend910B",
   "start_time": "2026-04-08T10:00:00Z",
-  "current_version": 23,
+  "current_step": 47,
   "best_version": 21,
   "best_score": 856.3,
-  "stall_counter": 0,
+  "best_commit": "abc1234",
+  "stall_counter": 3,
+  "failed_attempts": 2,
+  "consecutive_redirects": 1,
   "total_attempts": 47,
-  "redirect_count": 2,
+  "last_completed_step": 46,
+  "active_attempt_dir": null,
   "lineage": [
     {
       "version": 0,
@@ -574,6 +678,15 @@ supervisor.py (Python 脚本, 长时间运行)
 }
 ```
 
+**计数器规则：**
+- `stall_counter`：仅"正确但未提升"时加一；出现性能提升时清零
+- `failed_attempts`：编译失败、正确性失败、超时时加一；成功提交时清零
+- `consecutive_redirects`：触发 redirect 后加一；一旦出现性能提升则清零
+
+**恢复规则：**
+- `active_attempt_dir` 非空表示上次运行中断，恢复时应清理该目录后继续
+- `last_completed_step` 用于确定恢复起点，避免重复计数
+
 ### 5.4 主循环逻辑
 
 ```python
@@ -581,65 +694,70 @@ def main_loop():
     state = load_or_init_state()
 
     while not should_stop(state):
-        # 1. 准备 Agent 上下文
-        lineage_summary = format_lineage(state.lineage)
-        current_kernel = read_current_kernel(state)
-        current_score = state.lineage[-1].score if state.lineage else None
+        # 1. 从当前 best 创建隔离的候选工作区
+        attempt_dir = prepare_attempt_dir_from_best(state)
+        state.active_attempt_dir = attempt_dir
+        save_state_atomically(state)
 
-        # 2. 检测停滞，决定是否干预
-        if state.stall_counter >= STALL_THRESHOLD:
-            directive = generate_redirect_directive(state)  # 调用 Claude LLM
-            state.redirect_count += 1
-            state.stall_counter = 0
-        else:
-            directive = None
+        # 2. 检测停滞，决定是否生成重定向指令
+        directive = maybe_generate_redirect(state)
 
         # 3. 启动 Kernel Evolution Agent 会话
-        result = launch_agent_session(
-            agent="agents/kernel-evolution-agent/AGENT.md",
-            context={
-                "operator_spec": state.operator_spec,
-                "current_kernel": current_kernel,
-                "current_score": current_score,
-                "lineage_summary": lineage_summary,
-                "directive": directive,
-            },
-            timeout=MAX_SESSION_DURATION
+        result = run_agent(
+            operator_spec_path=state.operator_spec_path,
+            baseline_dir=state.best_dir,
+            candidate_dir=attempt_dir,
+            lineage_summary=build_lineage_summary(state),
+            directive=directive,
         )
-        state.total_attempts += 1
 
-        # 4. 处理结果
-        if result.committed:
-            state.current_version += 1
-            state.lineage.append({
-                "version": state.current_version,
-                "commit": result.commit_hash,
-                "score": result.score.performance_total_tflops,
-                "description": result.description,
-            })
-            if result.score.performance_total_tflops > state.best_score:
-                state.best_version = state.current_version
-                state.best_score = result.score.performance_total_tflops
+        # 4. 加载评分结果
+        score = load_score_if_exists(result.score_json_path)
+
+        # 5. 处理结果
+        if result.status == "committed":
+            promote_attempt_to_best(attempt_dir, state)
+            record_lineage(state, result, score)
+            if score.improved:
                 state.stall_counter = 0
+                state.consecutive_redirects = 0
             else:
                 state.stall_counter += 1
-        else:
+            state.failed_attempts = 0
+        elif result.status in ("failed", "timeout"):
+            state.failed_attempts += 1
+        elif result.status == "rejected":
             state.stall_counter += 1
 
-        # 5. 保存状态
-        save_state(state)
-        log_iteration(state, result)
+        # 6. 清理并持久化
+        state.total_attempts += 1
+        state.last_completed_step = state.current_step
+        state.current_step += 1
+        state.active_attempt_dir = None
+        cleanup_or_archive_attempt(attempt_dir, result.status)
+        save_state_atomically(state)
 ```
+
+关键设计：
+- `prepare_attempt_dir_from_best`：从 `best/` 复制到 `attempts/step_{N}/`，确保隔离
+- `promote_attempt_to_best`：仅当满足提交准则时，用候选替换 `best/`
+- `save_state_atomically`：原子写入（先写临时文件再 rename），防止中断导致状态损坏
+- `cleanup_or_archive_attempt`：失败的候选可归档或直接清理，防止磁盘泄漏
 
 ### 5.5 停滞检测与干预
 
 #### 停滞信号
 
-| 条件 | 阈值 | 含义 |
-|------|------|------|
-| 连续 commit 但无性能提升 | `stall_counter >= 5` | Agent 陷入局部最优 |
-| 连续尝试但无法成功 commit | `failed_attempts >= 10` | Agent 遇到编译或正确性障碍 |
-| 连续重定向无效 | `redirect_count >= 3` (连续) | 可能已接近硬件极限 |
+| 信号 | 含义 | 默认阈值 |
+|------|------|---------|
+| `stall_counter` | 连续正确但无性能提升 | 5 |
+| `failed_attempts` | 连续编译/正确性/超时失败 | 5 |
+| `consecutive_redirects` | 连续重定向后仍无提升 | 3 |
+
+**触发策略（不同失败原因对应不同响应）：**
+- `stall_counter >= threshold`：生成新的搜索方向（redirect），引导 Agent 尝试不同优化路径
+- `failed_attempts >= threshold`：切换到 repair/diagnostic 模式，使用 `repair-step.md` prompt
+- `consecutive_redirects >= threshold`：停止运行，等待人工介入（可能已接近硬件极限或存在系统性问题）
 
 #### 重定向指令生成
 
@@ -682,22 +800,28 @@ def main_loop():
 
 ### 5.6 Git 谱系管理
 
+- 每个成功版本 commit 一次
+- Tag 使用稳定格式：`v{N}`（不含浮点分数）
+- 分数和配置摘要写入 commit message 和 `evolution/scores/v{N}.json`
+
 ```
-# 每个成功版本的 commit
+# commit message 格式
 git commit -m "v{N}: {description}
 
-Score: {score} TFLOPS
+Score: {score}
 Correctness: PASS ({n_configs}/{n_configs} configs)
-Best config: {best_config_name} @ {best_tflops} TFLOPS
-Worst config: {worst_config_name} @ {worst_tflops} TFLOPS"
+Best config: {best_config_name} @ {best_primary}
+Worst config: {worst_config_name} @ {worst_primary}"
 
-# 打 tag 便于快速检索
-git tag v{N}-score-{score}
+# tag 使用简洁格式
+git tag v{N}
 
 # Agent 可以查看任何历史版本
-git show v{N}:workspace/ops/{op_name}/{op_name}.asc
-git diff v{N-1}..v{N} -- workspace/ops/{op_name}/
+git show v{N}:workspace/runs/{op_name}/best/{op_name}.asc
+git diff v{N-1}..v{N} -- workspace/runs/{op_name}/
 ```
+
+**禁止**使用 `v{N}-score-{score}` 这类包含浮点数的 tag 名称——tag 名会变脆弱，不适合解析和比较。
 
 ### 5.7 停止条件
 
@@ -705,16 +829,30 @@ git diff v{N-1}..v{N} -- workspace/ops/{op_name}/
 |------|--------|--------|
 | 最大运行时间 | 7 天 | `config.yaml: max_wall_time` |
 | 最大提交版本数 | 100 | `config.yaml: max_versions` |
-| 目标性能达成 | 无 | `config.yaml: target_tflops` |
+| 目标性能达成 | 无 | `config.yaml: target_performance` |
 | 连续重定向失败 | 3 次 | `config.yaml: max_consecutive_redirects` |
 | 手动中断 | Ctrl+C | — |
 
 ### 5.8 会话管理
 
-每个变异步骤是一个**全新的 Claude Code 会话**（避免上下文窗口溢出）。连续性通过以下方式保持：
-- **谱系摘要**传递给每个新会话（一行一个版本，线性增长但紧凑）
-- **完整代码和 profiling 数据**可通过文件读取在会话内访问
-- **每个会话的推理日志**保存到 `evolution/logs/step_{N}.md` 供后续分析
+每个变异步骤使用**全新的 Claude Code 会话**（避免上下文窗口溢出）。为防止谱系线性膨胀，传递给新会话的上下文分为三部分：
+
+1. **`recent_history`**
+   - 最近 5 个版本的摘要（版本号、分数、一句话描述、关键 profiling 指标）
+
+2. **`best_history`**
+   - 历史最佳 3 个版本的摘要（用于理解性能天花板演变）
+
+3. **`strategy_summary`**
+   - 从完整谱系自动生成的压缩总结：
+     - 哪些优化方向有效（产生了 improving 版本）
+     - 哪些方向失败（及失败原因类别）
+     - 当前未覆盖的方向
+
+补充：
+- 完整代码和 profiling 数据可通过文件读取在会话内访问
+- 每个会话的推理日志保存到 `evolution/logs/step_{N}.md` 供后续分析
+- `strategy_summary` 由 Supervisor 在每轮开始前从 `state.json` 和 `evolution/logs/` 生成
 
 ### 5.9 配置文件
 
@@ -724,23 +862,28 @@ git diff v{N-1}..v{N} -- workspace/ops/{op_name}/
 # 算子配置
 operator_name: flash_attention_ascend
 target_chip: Ascend910B
-operator_spec_path: workspace/ops/flash_attention_ascend/spec.md
+operator_spec_path: workspace/specs/flash_attention_ascend.md
+
+# 工作区
+runs_dir: workspace/runs/flash_attention_ascend
 
 # 进化参数
 max_wall_time: 168h        # 7 天
 max_versions: 100
 max_session_duration: 30m  # 单次 Agent 会话最大时长
-stall_threshold: 5         # 连续无改进版本数触发重定向
-max_failed_attempts: 10    # 连续失败尝试数触发重定向
+stall_threshold: 5         # 连续"正确但无提升"触发重定向
+max_failed_attempts: 5     # 连续失败触发 repair 模式
 max_consecutive_redirects: 3
 
 # 评分配置
 scoring_config_path: scoring/configs/attention.json
+metric_type: tflops        # tflops | bandwidth_gbps | latency_us
+min_improvement_ratio: 0.02  # 最小提升门槛 2%
 warmup_rounds: 10
 repeat_rounds: 5
 
 # 目标（可选）
-target_tflops: null        # 设置后达标即停
+target_performance: null   # 设置后达标即停
 
 # Agent 配置
 agent_definition: agents/kernel-evolution-agent/AGENT.md
@@ -808,16 +951,19 @@ AscendC-Kernel-Agent/
 │   └── logs/                              # 推理日志（运行时）
 │
 ├── workspace/                             # 内核开发工作区
-│   └── ops/
-│       └── {operator_name}/
-│           ├── {operator_name}.asc        # 内核源码
-│           ├── CMakeLists.txt             # 构建配置
-│           ├── run.sh                     # 构建运行脚本
-│           ├── scripts/
-│           │   ├── gen_data.py            # 测试数据生成
-│           │   └── verify_result.py       # 结果验证
-│           └── docs/
-│               └── environment.json       # 环境信息
+│   ├── specs/
+│   │   └── {op_name}.md                   # 算子规格文件
+│   └── runs/
+│       └── {op_name}/
+│           ├── best/                      # 当前最佳版本（只读基线）
+│           │   ├── {op_name}.asc          # 内核源码
+│           │   ├── CMakeLists.txt         # 构建配置
+│           │   ├── run.sh                 # 构建运行脚本
+│           │   └── scripts/
+│           │       ├── gen_data.py        # 测试数据生成
+│           │       └── verify_result.py   # 结果验证
+│           └── attempts/                  # 候选版本（每轮一个子目录）
+│               └── step_{N}/             # 本轮候选（可写）
 │
 ├── Knowledage-base/                       # 知识库（已有 + 新增索引）
 │   ├── INDEX-attention-ops.md             # [新增] Attention 算子导航
@@ -833,34 +979,31 @@ AscendC-Kernel-Agent/
 
 ## 7. 实施阶段
 
-### Phase 1：基础设施（知识库 + 评分函数）
-- [ ] 创建 `CLAUDE.md`（全局知识索引）
-- [ ] 创建 3 个 `INDEX-*.md` 导航文件
-- [ ] 创建 `scoring/` 目录及全部脚本
-- [ ] 在 `asc-devkit/examples/` 中的一个示例算子上验证评分流程
+### Phase 1：最小评分闭环
+- [ ] 校准现有 `CLAUDE.md` 和 `INDEX-*.md`（文件已存在，补充缺失内容）
+- [ ] 实现 `scoring/compile.sh`
+- [ ] 实现 smoke correctness（`gen_golden.py` + `verify_correctness.py`）
+- [ ] 在官方 `asc-devkit/examples/` 的 add/softmax 样例上跑通评分，生成稳定的评分 JSON
 
-### Phase 2：代码生成 Agent
-- [ ] 创建 `agents/kernel-evolution-agent/AGENT.md`
-- [ ] 创建 prompt 模板（seed/optimize/repair）和 operator-spec 模板
-- [ ] 验证种子生成：给定简单算子规格 → 生成可工作的 v0
-- [ ] 验证单次优化：给定 v0 → 生成改进的 v1
+### Phase 2：最小 Supervisor 闭环
+- [ ] 实现 `workspace/runs/{op_name}/best/` + `attempts/step_{N}/` 工作区模型
+- [ ] 实现 `evolution/state.json` 持久化和中断恢复
+- [ ] 用"固定 prompt + 单算子修改"跑通 3 轮迭代，验证 prepare/promote/archive 流程
 
-### Phase 3：Supervisor 进化引擎
-- [ ] 实现 `evolution/supervisor.py` 主循环
-- [ ] 实现停滞检测 + 重定向指令生成
-- [ ] 实现 git 谱系管理（commit、tag、score metadata）
-- [ ] 端到端测试：Supervisor 启动 Agent → Agent 生成内核 → 评分记录 → 谱系增长
+### Phase 3：Agent 化
+- [ ] 接入 `kernel-evolution-agent`（AGENT.md + prompt 模板）
+- [ ] 实现 repair / optimize 两类 prompt
+- [ ] 验证能稳定产出 v0（种子生成）和 v1（首次优化）
 
-### Phase 4：集成调优
-- [ ] 在简单算子（Softmax 或 LayerNorm）上运行 10+ 版本进化
-- [ ] 调优停滞阈值和重定向逻辑
-- [ ] 验证完整循环可稳定运行
-- [ ] 记录经验教训，优化 prompt
+### Phase 4：分级测试和停滞恢复
+- [ ] 补充 representative / stress 级别测试
+- [ ] 实现 redirect 指令生成和分类停滞响应
+- [ ] 验证状态机在各种失败场景下的稳定性
 
-### Phase 5：挑战目标
-- [ ] 应用于 Attention 算子（利用 `ops-transformer/attention/` 丰富参考）
-- [ ] 运行多日连续进化
-- [ ] 分析优化轨迹和发现的技术
+### Phase 5：复杂算子
+- [ ] 迁移到 LayerNorm / Softmax，验证跨算子泛化能力
+- [ ] 最后迁移到 Attention（利用 `ops-transformer/attention/` 丰富参考）
+- [ ] 运行长时间进化，分析优化轨迹
 
 ---
 
@@ -868,8 +1011,9 @@ AscendC-Kernel-Agent/
 
 | 验证类型 | 内容 | 通过标准 |
 |----------|------|---------|
-| 单元验证 | scoring 脚本能正确编译、测试、评分一个 asc-devkit 示例 | 评分 JSON 格式正确，正确性判定准确 |
-| 集成验证 | Agent 能从算子规格生成 v0 并通过正确性测试 | 生成的 .asc 文件可编译，correctness_total = 1.0 |
-| 端到端验证 | Supervisor 能自动运行 5+ 轮进化 | 谱系正确记录，评分单调不降（仅 commit 通过的版本） |
-| 停滞恢复 | 人工制造停滞，验证重定向是否有效 | 重定向后 Agent 尝试新方向，非重复之前的失败尝试 |
-| 长时间运行 | 连续运行 24+ 小时 | 无崩溃，状态正确持久化，可从中断恢复 |
+| 最小评分闭环 | 对一个官方样例完成编译、运行、正确性判定 | 生成稳定评分 JSON，结果可复现 |
+| 工作区隔离 | 失败候选不会污染当前 best | best 目录内容和 commit 不变 |
+| 状态恢复 | Supervisor 在中断后恢复 | 从 state.json 继续运行，无重复计数 |
+| Agent 集成 | Agent 能在 candidate_dir 内完成一次修改和评分 | 返回结构化结果，Supervisor 可消费 |
+| 迭代有效性 | 简单算子连续运行 5 轮 | 至少产生 1 个 improving 版本 |
+| 长时间稳定性 | 连续运行 24h | 无状态损坏，无 attempt 目录泄漏，无死循环 |

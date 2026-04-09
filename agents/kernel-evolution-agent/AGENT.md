@@ -46,18 +46,18 @@ permission:
 - `ascendc-docs-search` — API 文档索引搜索
 - `ascendc-code-review` — 代码审查（7 维 100 分制）
 
-Skills 路径前缀：`Knowledage-base/coding-skills/skills/skills/`
+Skills 路径前缀：`Knowledge-base/coding-skills/skills/skills/`
 
 ### Sources（搜索访问）
-- 参考实现：`Knowledage-base/coding-sources/ops-coding-sources/`（Attention/NN/Math/CV 算子）
-- API 文档：`Knowledage-base/coding-sources/programming-coding-sources/asc-devkit/docs/api/context/`（1711 文件）
-- 编程指南：`Knowledage-base/coding-sources/programming-coding-sources/asc-devkit/docs/guide/`
-- SDK 示例：`Knowledage-base/coding-sources/programming-coding-sources/asc-devkit/examples/`
+- 参考实现：`Knowledge-base/coding-sources/ops-coding-sources/`（Attention/NN/Math/CV 算子）
+- API 文档：`Knowledge-base/coding-sources/programming-coding-sources/asc-devkit/docs/api/context/`（1711 文件）
+- 编程指南：`Knowledge-base/coding-sources/programming-coding-sources/asc-devkit/docs/guide/`
+- SDK 示例：`Knowledge-base/coding-sources/programming-coding-sources/asc-devkit/examples/`
 
 ### 导航索引
-- `Knowledage-base/INDEX-attention-ops.md` — 48 个 Attention 算子目录
-- `Knowledage-base/INDEX-api-reference.md` — API 文档分类
-- `Knowledage-base/INDEX-examples.md` — 示例代码分类
+- `Knowledge-base/INDEX-attention-ops.md` — 48 个 Attention 算子目录
+- `Knowledge-base/INDEX-api-reference.md` — API 文档分类
+- `Knowledge-base/INDEX-examples.md` — 示例代码分类
 
 ## Edit-Evaluate-Diagnose 循环
 
@@ -79,12 +79,13 @@ Skills 路径前缀：`Knowledage-base/coding-skills/skills/skills/`
 - 参考实现 → 搜索 `ops-coding-sources/` 中的相关算子
 
 ### 3. EDIT — 实现编辑
-- 修改内核源码 `workspace/ops/{op_name}/{op_name}.asc`
+- 修改候选目录中的内核源码（`{{CANDIDATE_DIR}}/{op_name}.asc`）
+- 基线只读参考位于 `workspace/runs/{op_name}/best/`
 - 若需要，同步修改 CMakeLists.txt、host 侧代码
 
 ### 4. COMPILE — 编译
 ```bash
-cd workspace/ops/{op_name}
+cd {{CANDIDATE_DIR}}
 bash run.sh  # 或 mkdir -p build && cd build && cmake .. && make -j
 ```
 - 编译失败 → 读取错误日志 → 诊断 → 回到 EDIT
@@ -92,14 +93,14 @@ bash run.sh  # 或 mkdir -p build && cd build && cmake .. && make -j
 
 ### 5. TEST CORRECTNESS — 正确性测试
 ```bash
-bash scoring/test_correctness.sh workspace/ops/{op_name} scoring/configs/{config}.json
+bash scoring/test_correctness.sh {{CANDIDATE_DIR}} scoring/configs/{config}.json
 ```
 - 失败 → 加载 `ascendc-precision-debug`，分析误差模式 → 回到 EDIT
 - 常见原因：Pipeline 同步缺失、DataCopy 对齐、FP16 溢出、Cast RoundMode
 
 ### 6. TEST PERFORMANCE — 性能测试
 ```bash
-bash scoring/test_performance.sh workspace/ops/{op_name} scoring/configs/{config}.json
+bash scoring/test_performance.sh {{CANDIDATE_DIR}} scoring/configs/{config}.json
 ```
 - 分析 8 CSV profiling 指标
 - 与 f(x_t) 对比
@@ -149,3 +150,5 @@ bash scoring/test_performance.sh workspace/ops/{op_name} scoring/configs/{config
 - **必须**使用 `.asc` 文件扩展名
 - **必须**在编辑前理解当前代码，不要盲目重写
 - **必须**在提交前通过全部正确性配置测试
+- **禁止**直接修改 `best/` 目录，所有编辑仅在候选目录中进行
+- **提交条件**：`correctness_total = 1.0`（全配置通过）且 performance 优于当前最佳版本超过最小改进阈值（默认 2%）

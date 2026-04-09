@@ -1,6 +1,6 @@
 # ASC 示例代码导航索引
 
-基础路径：`Knowledage-base/coding-sources/programming-coding-sources/asc-devkit/examples/`
+基础路径：`Knowledge-base/coding-sources/programming-coding-sources/asc-devkit/examples/`
 
 ## 示例分类
 

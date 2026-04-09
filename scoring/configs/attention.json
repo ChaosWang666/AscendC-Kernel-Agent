@@ -1,60 +1,75 @@
 {
   "operator": "flash_attention_ascend",
-  "description": "Flash Attention 测试配置（控制总 token 数为 32768）",
-  "configs": [
+  "description": "Flash Attention 测试配置（分级）",
+  "metric_type": "tflops",
+  "min_improvement_ratio": 0.02,
+  "smoke": [
     {
-      "name": "b8_s4096_h16_d128_bf16_causal",
+      "name": "b8_s128_h16_d128_bf16_causal",
       "batch": 8,
-      "seq_len": 4096,
+      "seq_len": 128,
       "heads": 16,
       "dim": 128,
       "dtype": "bf16",
       "causal": true
     },
     {
-      "name": "b4_s8192_h16_d128_bf16_causal",
+      "name": "b8_s256_h16_d128_bf16_noncausal",
+      "batch": 8,
+      "seq_len": 256,
+      "heads": 16,
+      "dim": 128,
+      "dtype": "bf16",
+      "causal": false
+    }
+  ],
+  "representative": [
+    {
+      "name": "b8_s1024_h16_d128_bf16_causal",
+      "batch": 8,
+      "seq_len": 1024,
+      "heads": 16,
+      "dim": 128,
+      "dtype": "bf16",
+      "causal": true
+    },
+    {
+      "name": "b4_s2048_h16_d128_bf16_causal",
       "batch": 4,
-      "seq_len": 8192,
+      "seq_len": 2048,
       "heads": 16,
       "dim": 128,
       "dtype": "bf16",
       "causal": true
     },
     {
-      "name": "b2_s16384_h16_d128_bf16_causal",
+      "name": "b4_s2048_h16_d128_bf16_noncausal",
+      "batch": 4,
+      "seq_len": 2048,
+      "heads": 16,
+      "dim": 128,
+      "dtype": "bf16",
+      "causal": false
+    }
+  ],
+  "stress": [
+    {
+      "name": "b2_s4096_h16_d128_bf16_causal",
       "batch": 2,
-      "seq_len": 16384,
-      "heads": 16,
-      "dim": 128,
-      "dtype": "bf16",
-      "causal": true
-    },
-    {
-      "name": "b1_s32768_h16_d128_bf16_causal",
-      "batch": 1,
-      "seq_len": 32768,
-      "heads": 16,
-      "dim": 128,
-      "dtype": "bf16",
-      "causal": true
-    },
-    {
-      "name": "b8_s4096_h16_d128_bf16_noncausal",
-      "batch": 8,
       "seq_len": 4096,
       "heads": 16,
       "dim": 128,
       "dtype": "bf16",
-      "causal": false
+      "causal": true
     },
     {
-      "name": "b4_s8192_h16_d128_bf16_noncausal",
-      "batch": 4,
+      "name": "b1_s8192_h16_d128_bf16_causal",
+      "batch": 1,
       "seq_len": 8192,
       "heads": 16,
       "dim": 128,
       "dtype": "bf16",
-      "causal": false
+      "causal": true
     }
   ]
 }

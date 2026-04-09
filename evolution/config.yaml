@@ -3,23 +3,28 @@
 # 算子配置
 operator_name: add_custom
 target_chip: Ascend910B
-operator_spec_path: ""  # 算子规格文件路径（可选）
+operator_spec_path: workspace/specs/add_custom.md
+
+# 工作区
+runs_dir: workspace/runs/add_custom
 
 # 进化参数
 max_wall_time: 168h         # 最大运行时间（7 天）
 max_versions: 100           # 最大提交版本数
 max_session_duration: 30m   # 单次 Agent 会话最大时长
-stall_threshold: 5          # 连续无改进版本数触发重定向
-max_failed_attempts: 10     # 连续失败尝试数触发重定向
+stall_threshold: 5          # 连续"正确但无提升"触发重定向
+max_failed_attempts: 5      # 连续失败触发 repair 模式
 max_consecutive_redirects: 3  # 连续重定向失败则停止
 
 # 评分配置
 scoring_config_path: scoring/configs/default.json
+metric_type: latency_us     # tflops | bandwidth_gbps | latency_us
+min_improvement_ratio: 0.02  # 最小提升门槛 2%
 warmup_rounds: 10
 repeat_rounds: 5
 
 # 目标（可选，设置后达标即停）
-target_tflops: null
+target_performance: null
 
 # Agent 配置
 agent_definition: agents/kernel-evolution-agent/AGENT.md

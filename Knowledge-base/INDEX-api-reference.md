@@ -2,7 +2,7 @@
 
 ## 文档总览
 
-基础路径：`Knowledage-base/coding-sources/programming-coding-sources/asc-devkit/docs/`
+基础路径：`Knowledge-base/coding-sources/programming-coding-sources/asc-devkit/docs/`
 
 | 目录 | 文件数 | 说明 |
 |------|--------|------|

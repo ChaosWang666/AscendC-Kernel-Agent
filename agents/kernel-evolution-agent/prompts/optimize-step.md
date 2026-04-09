@@ -11,10 +11,11 @@
 
 ### 当前版本
 版本号：v{{CURRENT_VERSION}}
-评分：{{CURRENT_SCORE}} TFLOPS
+评分：{{CURRENT_SCORE}}
 
 ### 当前内核代码
-文件：`workspace/ops/{{OP_NAME}}/{{OP_NAME}}.asc`
+候选目录：`{{CANDIDATE_DIR}}/{{OP_NAME}}.asc`
+基线（只读）：`{{BASELINE_DIR}}/{{OP_NAME}}.asc`
 
 ### Profiling 数据摘要
 ```json
@@ -44,12 +45,13 @@
 - 不要重复谱系中已失败的方向
 - 如果 Supervisor 提供了指令，优先按指令探索
 - 编辑前先理解当前代码
+- 所有编辑在候选目录 `{{CANDIDATE_DIR}}` 中进行
 - 提交前确保全部正确性配置通过
 
 ## 评分命令
 
 ```bash
-bash scoring/score.sh workspace/ops/{{OP_NAME}} scoring/configs/{{CONFIG}}.json
+bash scoring/score.sh {{CANDIDATE_DIR}} scoring/configs/{{CONFIG}}.json
 ```
 
 结果写入：`evolution/scores/v{{NEXT_VERSION}}.json`

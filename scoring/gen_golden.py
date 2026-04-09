@@ -161,8 +161,17 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    configs = test_config.get("configs", [{}])
-    for i, config in enumerate(configs):
+    # 支持分级配置格式（smoke/representative/stress）和旧格式（configs）
+    all_configs = []
+    for level in ["smoke", "representative", "stress"]:
+        level_configs = test_config.get(level, [])
+        for c in level_configs:
+            c["_level"] = level
+        all_configs.extend(level_configs)
+    if not all_configs:
+        all_configs = test_config.get("configs", [{}])
+
+    for i, config in enumerate(all_configs):
         config["operator"] = op_name
         config_name = config.get("name", f"config_{i}")
         config_dir = os.path.join(args.output_dir, config_name)

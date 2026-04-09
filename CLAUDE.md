@@ -9,6 +9,8 @@
 
 架构：`evolution/supervisor.py` → `Kernel Evolution Agent` → `scoring/score.sh` → git commit
 
+工作区模型：`workspace/runs/{op_name}/best/`（只读基线） + `workspace/runs/{op_name}/attempts/step_{N}/`（候选目录）
+
 参考论文：`./AVO-paper/`
 技术规格：`./spec.md`
 
@@ -18,7 +20,7 @@
 
 ### Skills（Layer 2）— 按需加载
 
-相对路径前缀：`Knowledage-base/coding-skills/skills/skills/`
+相对路径前缀：`Knowledge-base/coding-skills/skills/skills/`
 
 | Skill | 用途 | 路径 |
 |-------|------|------|
@@ -41,7 +43,7 @@
 
 ### Agents（参考知识）
 
-相对路径前缀：`Knowledage-base/coding-skills/skills/agents/`
+相对路径前缀：`Knowledge-base/coding-skills/skills/agents/`
 
 | Agent | 角色 | 路径 |
 |-------|------|------|
@@ -51,11 +53,11 @@
 | ascendc-kernel-reviewer | 内核审查者（7 维评分 + 精度 + 性能验证） | `ascendc-kernel-reviewer/ascendc-kernel-reviewer.md` |
 | ascendc-ops-reviewer | 算子审查者（快速 / 完整审查模式） | `ascendc-ops-reviewer/AGENT.md` |
 
-Team 工作流：`Knowledage-base/coding-skills/skills/teams/ops-direct-invoke/AGENTS.md`
+Team 工作流：`Knowledge-base/coding-skills/skills/teams/ops-direct-invoke/AGENTS.md`
 
 ### Sources（Layer 3）— 搜索访问
 
-相对路径前缀：`Knowledage-base/coding-sources/`
+相对路径前缀：`Knowledge-base/coding-sources/`
 
 | 分类 | 路径 | 说明 |
 |------|------|------|
@@ -70,9 +72,9 @@ Team 工作流：`Knowledage-base/coding-skills/skills/teams/ops-direct-invoke/A
 | 通信算子 | `comm-coding-sources/hcomm/` | CCU 内核、集合通信 |
 
 详细导航索引：
-- `Knowledage-base/INDEX-attention-ops.md`
-- `Knowledage-base/INDEX-api-reference.md`
-- `Knowledage-base/INDEX-examples.md`
+- `Knowledge-base/INDEX-attention-ops.md`
+- `Knowledge-base/INDEX-api-reference.md`
+- `Knowledge-base/INDEX-examples.md`
 
 ---
 
@@ -128,7 +130,7 @@ aclrtSynchronizeStream(stream);
 
 ### Direct Invoke（直调模式）
 ```bash
-cd workspace/ops/{op_name}
+cd workspace/runs/{op_name}/best
 mkdir -p build && cd build
 cmake .. -DASCEND_PRODUCT_TYPE={chip} -DASCEND_RUN_MODE=ONBOARD
 make -j
@@ -136,7 +138,7 @@ make -j
 
 ### 运行
 ```bash
-cd workspace/ops/{op_name}
+cd workspace/runs/{op_name}/best
 bash run.sh
 ```
 
@@ -177,4 +179,4 @@ supervisor.py 主循环:
   6. 循环直到停止条件
 ```
 
-评分函数：`scoring/score.sh {op_path} {config_path}` → `evolution/scores/v{N}.json`
+评分函数：`scoring/score.sh workspace/runs/{op_name}/best scoring/configs/{op_name}.json` → `evolution/scores/v{N}.json`

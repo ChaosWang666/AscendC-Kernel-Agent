@@ -1,6 +1,6 @@
 # Attention 算子导航索引
 
-基础路径：`Knowledage-base/coding-sources/ops-coding-sources/ops-transformer/attention/`
+基础路径：`Knowledge-base/coding-sources/ops-coding-sources/ops-transformer/attention/`
 
 ## Flash Attention 系列
 

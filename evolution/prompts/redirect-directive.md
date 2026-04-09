@@ -3,7 +3,7 @@
 ## 当前状态
 - 已提交 {{N}} 个版本
 - 运行时间: {{ELAPSED}}
-- 最佳评分: {{BEST_SCORE}} TFLOPS (版本 v{{BEST_VERSION}})
+- 最佳评分: {{BEST_SCORE}} ({{METRIC_TYPE}}) (版本 v{{BEST_VERSION}})
 - 最近 {{STALL_COUNT}} 个版本无改进
 
 ## Profiling 数据摘要
@@ -19,7 +19,7 @@
 - ascendc-api-best-practices: API 优化模式（Adds/Muls、Double Buffer）
 - ascendc-npu-arch: 芯片架构 A2/A3/A5、硬件约束
 - ops-profiling: 8 CSV 性能指标分析
-- 参考实现: Knowledage-base/coding-sources/ 中的算子源码
+- 参考实现: Knowledge-base/coding-sources/ 中的算子源码
 
 ## 任务
 
