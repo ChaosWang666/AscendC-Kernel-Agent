@@ -112,14 +112,22 @@ def main():
         "configs": [],
     }
 
-    # 阶段性失败（compile / deploy / pybind 等）
-    # failure_type 精确反映失败阶段，便于 Architect / Supervisor 做路径分流
-    if args.compile_error or args.failure_stage:
-        try:
-            with open(args.compile_error) as f:
-                error_log = f.read()[-2000:]  # 最后 2000 字符
-        except Exception:
-            error_log = "无法读取失败阶段日志"
+    # Pre-correctness 阶段性失败（compile / deploy / pybind）
+    # 这些阶段没有 correctness / performance 结果可解析，直接写 error_log 返回
+    PRE_CORRECTNESS_STAGES = {"compile", "deploy", "pybind"}
+    is_pre_correctness_failure = (
+        args.compile_error is not None
+        or (args.failure_stage in PRE_CORRECTNESS_STAGES)
+    )
+    if is_pre_correctness_failure:
+        if args.compile_error:
+            try:
+                with open(args.compile_error) as f:
+                    error_log = f.read()[-2000:]  # 最后 2000 字符
+            except Exception:
+                error_log = "无法读取失败阶段日志"
+        else:
+            error_log = ""
 
         stage = args.failure_stage or "compile"  # 默认 compile 保持向后兼容
         score["error_log"] = error_log
@@ -130,6 +138,8 @@ def main():
         with open(args.output, "w") as f:
             json.dump(score, f, indent=2, ensure_ascii=False)
         return
+    # correctness / performance 阶段的失败会继续向下流向正常的结果解析逻辑，
+    # 由后续的 correctness_total / performance_total 分支决定最终 failure_type
 
     # 加载正确性结果
     if args.correctness_result:
