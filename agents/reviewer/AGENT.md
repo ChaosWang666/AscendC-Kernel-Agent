@@ -167,19 +167,71 @@ cd {CANDIDATE_DIR}/{OpName}Custom
 - 修复建议: ...
 ```
 
-## 判定标准
+## 判定标准（Stage-aware）
 
-| 判定 | 条件 |
-|------|------|
-| **PASS** | 总分 >= 80，无阻塞问题 |
-| **PASS WITH NOTES** | 总分 >= 60，无阻塞问题，有建议级问题 |
-| **FAIL** | 总分 < 60，或存在阻塞问题 |
+**阶段识别**：从 `evolution/state.json` 读 `current_version`：
+- `current_version < 0` 或判定文档显式声明 "seed/placeholder allowed" → **seed 阶段**
+- 其他情况 → **normal 阶段**
 
-阻塞问题定义：
+| 判定 | Normal 阶段条件 | Seed 阶段条件 |
+|------|----------------|--------------|
+| **PASS**            | 总分 >= 80，无阻塞问题 | 总分 >= 65，编译正确性 == 10/10，无阻塞问题 |
+| **PASS WITH NOTES** | 总分 >= 60，无阻塞问题，有建议级问题 | 总分 >= 50，编译正确性 == 10/10 |
+| **FAIL**            | 总分 < 60，或存在阻塞问题 | 编译失败 或 结构缺失（TilingData/OpDef/Kernel class 任一缺失）|
+
+### Seed 阶段的特殊规则（为什么）
+
+seed 版本按 Architect 设计就是"占位允许"的首版，目标是让 compile→deploy→pybind 走通。
+- **允许** `Process()` 里 `Duplicate(0.0f)` / 固定常量写出（显式标记 `// v0 placeholder`）
+- **禁止** 的项：kernel 类签名缺失、TilingFunc 未设置 block_dim、OpDef 未注册
+- 功能正确性维度（25 分）在 seed 阶段最多按 "结构是否可扩展到 v1" 打分，不要求算法正确
+- 精度安全性维度（10 分）在 seed 阶段可直接给 "N/A（seed 占位）"，不计入总分（此时满分变 90）
+
+### 阻塞问题定义
+
 - 编译失败
-- 功能逻辑错误（计算结果不正确）
+- 功能逻辑错误（计算结果不正确）— **seed 阶段豁免**
 - Pipeline 同步缺陷（数据竞争）
 - UB 越界（Buffer 分配超过硬件容量）
+- kernel 签名与 OpDef 注册的输入/输出数量或类型不一致
+
+## 独立构建验证 runbook
+
+Reviewer 必须独立 rebuild 候选工程，不信任 Developer 提交的 `build_out/`。标准流程：
+
+```bash
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+cd {CANDIDATE_DIR}/{OpName}Custom
+rm -rf build_out                 # 清理 Developer 残留
+bash build.sh 2>&1 | tee /tmp/reviewer_build.log
+ls build_out/*.run && echo "INDEPENDENT BUILD: SUCCESS" || echo "INDEPENDENT BUILD: FAIL"
+```
+
+每次 Bash 工具调用必须重新 `source set_env.sh`，shell 状态不在工具调用间持久。
+
+## REVIEW.md 强制结构化 trailer
+
+REVIEW.md 的最后一部分必须是机器可读的 YAML trailer，供 Architect / Supervisor 自动消费：
+
+```yaml
+---
+reviewer_trailer:
+  verdict: PASS | PASS_WITH_NOTES | FAIL
+  stage: seed | normal
+  total_score: <int 0-100>
+  dimension_scores:
+    compilation:   <int>
+    functionality: <int>
+    api_specs:     <int>
+    tiling:        <int>
+    pipeline:      <int>
+    precision:     <int>
+    style:         <int>
+  blocking_issues: <int>     # 数量，0 表示无阻塞
+  independent_build: success | fail | skipped
+  next_action: accept | repair_by_developer | escalate_to_supervisor
+---
+```
 
 ## 约束
 
