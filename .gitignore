@@ -1,0 +1,35 @@
+# Claude Code local state
+.claude/
+
+# Evolution runtime artifacts — keep directories (via .gitkeep), ignore contents
+evolution/state.json
+evolution/logs/step_*.md
+evolution/scores/v*.json
+evolution/redirects/step_*.md
+
+# Workspace runtime — test intermediates, deploy artifacts, build output
+workspace/deploy/
+workspace/runs/*/attempts/
+workspace/runs/*/build_out/
+workspace/runs/*/test/CppExtension/build/
+workspace/runs/*/test/CppExtension/dist/
+workspace/runs/*/test/CppExtension/*.egg-info/
+
+# Python / build
+__pycache__/
+*.pyc
+*.pyo
+*.so
+*.wheel
+*.whl
+build/
+dist/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local test sessions
+test_report.md
+test.md
