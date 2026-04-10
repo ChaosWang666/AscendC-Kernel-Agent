@@ -17,6 +17,7 @@
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import numpy as np
 from pathlib import Path
@@ -33,13 +34,88 @@ PRECISION_THRESHOLDS = {
 }
 
 
-def run_kernel(executable: str, config: dict, input_dir: str, output_dir: str) -> bool:
-    """运行内核，生成输出数据"""
+def npy_to_bin(npy_path: str, bin_path: str):
+    """将 .npy 文件转换为 .bin（原始字节）"""
+    data = np.load(npy_path)
+    data.tofile(bin_path)
+
+
+def bin_to_npy(bin_path: str, dtype, shape, npy_path: str):
+    """将 .bin 文件转换为 .npy"""
+    data = np.fromfile(bin_path, dtype=dtype).reshape(shape)
+    np.save(npy_path, data)
+
+
+def prepare_kernel_inputs(golden_dir: str, kernel_dir: str):
+    """将 golden 输入 .npy 转换为 .bin 放到内核的 input/ 目录"""
+    input_dir = os.path.join(kernel_dir, "input")
+    os.makedirs(input_dir, exist_ok=True)
+
+    input_files = sorted(Path(golden_dir).glob("input_*.npy"))
+    for npy_file in input_files:
+        tensor_name = npy_file.stem.replace("input_", "")
+        bin_file = os.path.join(input_dir, f"input_{tensor_name}.bin")
+        npy_to_bin(str(npy_file), bin_file)
+    return input_files
+
+
+def collect_kernel_outputs(golden_dir: str, kernel_dir: str, output_dir: str):
+    """从内核的 output/ 目录收集 .bin 输出并转换为 .npy"""
+    kernel_output_dir = os.path.join(kernel_dir, "output")
     os.makedirs(output_dir, exist_ok=True)
 
+    # 查找 golden 文件以获知输出的 dtype 和 shape
+    golden_files = sorted(Path(golden_dir).glob("golden_*.npy"))
+    for golden_file in golden_files:
+        tensor_name = golden_file.stem.replace("golden_", "")
+        golden_data = np.load(str(golden_file))
+
+        # 尝试多种命名约定查找 .bin 输出
+        candidates = [
+            os.path.join(kernel_output_dir, f"output_{tensor_name}.bin"),
+            os.path.join(kernel_output_dir, f"{tensor_name}.bin"),
+        ]
+        bin_file = None
+        for c in candidates:
+            if os.path.exists(c):
+                bin_file = c
+                break
+
+        if bin_file:
+            bin_to_npy(bin_file, golden_data.dtype, golden_data.shape,
+                       os.path.join(output_dir, f"output_{tensor_name}.npy"))
+        else:
+            # 也检查 .npy 输出（有些内核直接输出 .npy）
+            npy_candidates = [
+                os.path.join(kernel_output_dir, f"output_{tensor_name}.npy"),
+                os.path.join(kernel_output_dir, f"{tensor_name}.npy"),
+            ]
+            for nc in npy_candidates:
+                if os.path.exists(nc):
+                    shutil.copy2(nc, os.path.join(output_dir, f"output_{tensor_name}.npy"))
+                    break
+
+
+def run_kernel(executable: str, config: dict, input_dir: str, output_dir: str) -> bool:
+    """运行内核，生成输出数据
+
+    处理两种模式:
+    1. 内核通过 INPUT_DIR/OUTPUT_DIR 环境变量读写 .npy 文件
+    2. 内核从自身目录的 input/ 读 .bin、写到 output/（直调模式）
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 推断内核项目目录（executable 通常在 build/ 下）
+    exe_path = os.path.abspath(executable)
+    build_dir = os.path.dirname(exe_path)
+    kernel_dir = os.path.dirname(build_dir)  # build/ 的上级
+
+    # 准备输入: 将 .npy 转换为 .bin 放到内核的 input/ 目录
+    prepare_kernel_inputs(input_dir, kernel_dir)
+
     env = os.environ.copy()
-    env["INPUT_DIR"] = input_dir
-    env["OUTPUT_DIR"] = output_dir
+    env["INPUT_DIR"] = os.path.abspath(input_dir)
+    env["OUTPUT_DIR"] = os.path.abspath(output_dir)
 
     # 传递配置参数作为环境变量
     for key, value in config.items():
@@ -49,17 +125,21 @@ def run_kernel(executable: str, config: dict, input_dir: str, output_dir: str) -
 
     try:
         result = subprocess.run(
-            [executable],
+            [exe_path],  # 使用绝对路径
             env=env,
             capture_output=True,
             text=True,
             timeout=300,  # 5 分钟超时
+            cwd=kernel_dir,  # 从内核项目目录运行
         )
         if result.returncode != 0:
             print(f"  内核执行失败 (rc={result.returncode})")
             if result.stderr:
                 print(f"  stderr: {result.stderr[:500]}")
             return False
+
+        # 收集输出: 从内核 output/ 目录收集 .bin 并转换为 .npy
+        collect_kernel_outputs(input_dir, kernel_dir, output_dir)
         return True
     except subprocess.TimeoutExpired:
         print("  内核执行超时 (>300s)")

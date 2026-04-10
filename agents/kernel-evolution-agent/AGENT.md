@@ -1,6 +1,8 @@
 ---
 name: kernel-evolution-agent
-description: 自主 Ascend C 内核优化 Agent。实现 AVO 变异算子：读取谱系、查阅知识库、提出/实现编辑、编译、测试、诊断、提交改进版本。
+description: "[已废弃] 此 Agent 已被 Agent Team 架构替代。请使用 agents/AGENTS.md。"
+deprecated: true
+superseded_by: agents/AGENTS.md
 mode: subagent
 skills:
   - ascendc-tiling-design
@@ -46,7 +48,7 @@ permission:
 - `ascendc-docs-search` — API 文档索引搜索
 - `ascendc-code-review` — 代码审查（7 维 100 分制）
 
-Skills 路径前缀：`Knowledge-base/coding-skills/skills/skills/`
+Skills 路径前缀：`.claude/skills/`
 
 ### Sources（搜索访问）
 - 参考实现：`Knowledge-base/coding-sources/ops-coding-sources/`（Attention/NN/Math/CV 算子）

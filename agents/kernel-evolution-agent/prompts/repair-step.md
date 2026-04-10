@@ -42,7 +42,7 @@ git diff v{{LAST_CORRECT_VERSION}}..HEAD -- workspace/runs/{{OP_NAME}}/
 
 ## 诊断流程
 
-1. 读取 `Knowledge-base/coding-skills/skills/skills/ascendc-precision-debug/SKILL.md` 的诊断决策树
+1. 读取 `.claude/skills/ascendc-precision-debug/SKILL.md` 的诊断决策树
 2. 对比失败输出 vs golden 数据的误差模式：
    - 全零输出 → Pipeline 同步缺失
    - 大量 NaN/Inf → 精度溢出或除零

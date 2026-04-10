@@ -38,6 +38,49 @@ z = x + y  (逐元素加法)
 - N 必须对齐到 32 字节边界
 - 输出 z 与输入具有相同的形状和数据类型
 
+## 自定义算子工程
+
+工程名称：`AddCustom`
+
+### 算子定义 JSON
+
+```json
+[{
+    "op": "AddCustom",
+    "language": "cpp",
+    "input_desc": [
+        {"name": "x", "param_type": "required", "format": ["ND"], "type": ["float", "float16", "bfloat16"]},
+        {"name": "y", "param_type": "required", "format": ["ND"], "type": ["float", "float16", "bfloat16"]}
+    ],
+    "output_desc": [
+        {"name": "z", "param_type": "required", "format": ["ND"], "type": ["float", "float16", "bfloat16"]}
+    ]
+}]
+```
+
+### PyTorch 参考实现
+
+```python
+class Model(nn.Module):
+    def forward(self, x, y):
+        return x + y
+
+class ModelNew(nn.Module):
+    def forward(self, x, y):
+        import custom_ops_lib
+        return custom_ops_lib.add_custom(x, y)
+```
+
+### CppExtension 绑定
+
+```cpp
+at::Tensor add_custom_impl_npu(const at::Tensor& x, const at::Tensor& y) {
+    at::Tensor result = at::empty_like(x);
+    EXEC_NPU_CMD(aclnnAddCustom, x, y, result);
+    return result;
+}
+```
+
 ## 参考实现
 
 ```python

@@ -7,53 +7,97 @@
 - **K**: 领域知识库（本文件索引）
 - **f**: 评分函数 `scoring/score.sh`（正确性 + 性能）
 
-架构：`evolution/supervisor.py` → `Kernel Evolution Agent` → `scoring/score.sh` → git commit
+架构：**Agent Team**（`agents/AGENTS.md`）
+- **Architect Agent**（主 Agent）→ 任务理解、架构设计、流程编排
+- **Developer Agent** → 代码编写（op_host + op_kernel + tiling）
+- **Reviewer Agent** → 代码审查（7 维评分）
+- **Tester Agent** → 构建、部署、PyTorch 框架测试
+- **Supervisor Agent** → 仅在停滞时介入，不干预日常执行
 
-工作区模型：`workspace/runs/{op_name}/best/`（只读基线） + `workspace/runs/{op_name}/attempts/step_{N}/`（候选目录）
+启动方式：直接用 Claude Code 加载 `agents/AGENTS.md`，Architect Agent 自主执行进化循环
+
+工作区模型：自定义算子工程（非 Kernel 直调）
+- `workspace/runs/{op_name}/best/{OpName}Custom/`（只读基线）
+- `workspace/runs/{op_name}/attempts/step_{N}/`（候选目录）
+- `workspace/runs/{op_name}/test/`（PyTorch 测试基础设施）
 
 参考论文：`./AVO-paper/`
 技术规格：`./spec.md`
 
 ---
 
+## Agent Team
+
+| Agent | 定义文件 | 职责 |
+|-------|---------|------|
+| Architect | `agents/architect/AGENT.md` | 主 Agent：需求分析、架构设计、任务分发 |
+| Developer | `agents/developer/AGENT.md` | 代码编写：op_host / op_kernel / tiling |
+| Reviewer | `agents/reviewer/AGENT.md` | 代码审查：7 维质量评分、独立构建验证 |
+| Tester | `agents/tester/AGENT.md` | 测试验证：构建 → 部署 → PyTorch 框架测试 |
+| Supervisor | `agents/supervisor/AGENT.md` | 进化监督：仅在停滞时生成重定向指令 |
+
+团队编排：`agents/AGENTS.md`
+
+---
+
+## 自定义算子工程结构
+
+```
+{OpName}Custom/
+├── {op_name}_custom.json          — 算子定义 JSON（输入/输出/类型/格式）
+├── CMakeLists.txt                  — 根构建配置
+├── CMakePresets.json               — 构建预设
+├── build.sh                        — 构建编排脚本
+├── op_host/                        — Host 侧
+│   ├── CMakeLists.txt
+│   ├── {op_name}_custom.cpp       — OpDef + TilingFunc + InferShape
+│   └── {op_name}_custom_tiling.h  — TilingData 结构
+├── op_kernel/                      — Device 侧
+│   ├── CMakeLists.txt
+│   └── {op_name}_custom.cpp       — AscendC Kernel 实现
+└── build_out/                      — 构建产物
+    └── custom_opp_*.run            — 自安装部署包
+```
+
+### 测试基础设施
+
+```
+workspace/runs/{op_name}/test/
+├── CppExtension/                   — Python 绑定构建
+│   ├── setup.py                    — NpuExtension 配置
+│   ├── build_and_run.sh            — 构建安装脚本
+│   └── csrc/
+│       ├── op.cpp                  — 算子绑定（EXEC_NPU_CMD）
+│       └── pytorch_npu_helper.hpp  — NPU 辅助工具
+└── reference.py                    — Model + ModelNew + get_inputs
+```
+
+---
+
 ## 知识库地图
 
-### Skills（Layer 2）— 按需加载
+### Skills — Claude Code 原生 Skills
 
-相对路径前缀：`Knowledge-base/coding-skills/skills/skills/`
+已安装至 `.claude/skills/`，通过 Claude Code 原生技能系统自动加载。
 
-| Skill | 用途 | 路径 |
-|-------|------|------|
-| ascendc-tiling-design | Tiling 策略（归约/广播/逐元素/转换/MatMul/卷积） | `ascendc-tiling-design/SKILL.md` |
-| ascendc-api-best-practices | API 参数限制、优化模式（Adds/Muls、Double Buffer） | `ascendc-api-best-practices/SKILL.md` |
-| ascendc-npu-arch | 芯片架构代际 A2/A3/A5、条件编译 | `ascendc-npu-arch/SKILL.md` |
-| ascendc-precision-debug | 精度问题诊断决策树（症状→诊断→修复） | `ascendc-precision-debug/SKILL.md` |
-| ascendc-runtime-debug | 运行时错误码 161xxx/361xxx/561xxx、Kernel 挂死 | `ascendc-runtime-debug/SKILL.md` |
-| ops-profiling | 性能采集（msprof）、8 CSV 指标分析、perf_summary | `ops-profiling/SKILL.md` |
-| ops-precision-standard | 精度阈值标准（按 dtype 的 atol/rtol） | `ops-precision-standard/SKILL.md` |
-| ascendc-direct-invoke-template | Kernel 直调工程骨架（CMake + gen_golden + run.sh） | `ascendc-direct-invoke-template/SKILL.md` |
-| ascendc-docs-search | 本地 + 在线 API 文档搜索 | `ascendc-docs-search/SKILL.md` |
-| ascendc-env-check | NPU 设备查询、CANN 环境验证 | `ascendc-env-check/SKILL.md` |
-| ascendc-code-review | 假设检验法代码审查（7 维 100 分制） | `ascendc-code-review/SKILL.md` |
-| ascendc-ut-develop | 单元测试开发与覆盖增强 | `ascendc-ut-develop/SKILL.md` |
-| ascendc-st-design | 系统测试用例设计（aclnn 接口测试） | `ascendc-st-design/SKILL.md` |
-| ascendc-whitebox-design | 白盒测试用例生成 | `ascendc-whitebox-design/SKILL.md` |
-| ascendc-task-focus | 长任务聚焦管理 | `ascendc-task-focus/SKILL.md` |
-| ascendc-registry-invoke-to-direct-invoke | aclnn 注册调用转 Kernel 直调 | `ascendc-registry-invoke-to-direct-invoke/SKILL.md` |
-
-### Agents（参考知识）
-
-相对路径前缀：`Knowledge-base/coding-skills/skills/agents/`
-
-| Agent | 角色 | 路径 |
-|-------|------|------|
-| ascendc-ops-architect | 算子架构师（需求分析 → 技术方案） | `ascendc-ops-architect/AGENT.md` |
-| ascendc-kernel-architect | 内核架构师（需求 → API 映射 → 设计文档） | `ascendc-kernel-architect/ascendc-kernel-architect.md` |
-| ascendc-kernel-developer | 内核开发者（代码实现 → 编译 → 测试 → 性能） | `ascendc-kernel-developer/ascendc-kernel-developer.md` |
-| ascendc-kernel-reviewer | 内核审查者（7 维评分 + 精度 + 性能验证） | `ascendc-kernel-reviewer/ascendc-kernel-reviewer.md` |
-| ascendc-ops-reviewer | 算子审查者（快速 / 完整审查模式） | `ascendc-ops-reviewer/AGENT.md` |
-
-Team 工作流：`Knowledge-base/coding-skills/skills/teams/ops-direct-invoke/AGENTS.md`
+| Skill | 用途 |
+|-------|------|
+| ascendc-tiling-design | Tiling 策略（归约/广播/逐元素/转换/MatMul/卷积） |
+| ascendc-api-best-practices | API 参数限制、优化模式（Adds/Muls、Double Buffer） |
+| ascendc-npu-arch | 芯片架构代际 A2/A3/A5、条件编译 |
+| ascendc-precision-debug | 精度问题诊断决策树（症状→诊断→修复） |
+| ascendc-runtime-debug | 运行时错误码 161xxx/361xxx/561xxx、Kernel 挂死 |
+| ops-profiling | 性能采集（msprof / NPU Event）、指标分析 |
+| ops-precision-standard | 精度阈值标准（按 dtype 的 atol/rtol） |
+| ascendc-docs-search | 本地 + 在线 API 文档搜索 |
+| ascendc-env-check | NPU 设备查询、CANN 环境验证 |
+| ascendc-code-review | 假设检验法代码审查（7 维 100 分制） |
+| ascendc-ut-develop | 单元测试开发与覆盖增强 |
+| ascendc-st-design | 系统测试用例设计（aclnn 接口测试） |
+| ascendc-whitebox-design | 白盒测试用例生成 |
+| ascendc-task-focus | 长任务聚焦管理 |
+| ascendc-direct-invoke-template | Kernel 直调工程骨架（参考） |
+| ascendc-registry-invoke-to-direct-invoke | aclnn 注册调用转 Kernel 直调 |
 
 ### Sources（Layer 3）— 搜索访问
 
@@ -71,11 +115,6 @@ Team 工作流：`Knowledge-base/coding-skills/skills/teams/ops-direct-invoke/AG
 | Catlass 张量库 | `programming-coding-sources/catlass/` | 类 CUTLASS 的张量运算 |
 | 通信算子 | `comm-coding-sources/hcomm/` | CCU 内核、集合通信 |
 
-详细导航索引：
-- `Knowledge-base/INDEX-attention-ops.md`
-- `Knowledge-base/INDEX-api-reference.md`
-- `Knowledge-base/INDEX-examples.md`
-
 ---
 
 ## Ascend C 快速参考
@@ -92,21 +131,31 @@ GM (Global Memory, 大容量慢速)
 - UB 容量：A2/A3 = 192KB，A5 = 248KB
 - 最小对齐：32B（基本）、256B（REPEAT 操作最优）
 
-### Kernel 基本结构
+### Kernel 基本结构（自定义算子工程）
 ```cpp
-// 内核文件扩展名：.asc
-class OpKernel {
-    __aicore__ inline void Init(...) { /* UB 分配 */ }
+// op_kernel/{op_name}_custom.cpp
+#include "kernel_operator.h"
+
+class KernelOp {
+    __aicore__ inline void Init(GM_ADDR ..., GM_ADDR workspace, GM_ADDR tiling) {
+        GET_TILING_DATA(tiling_data, tiling);
+        // UB Buffer 分配
+    }
     __aicore__ inline void Process() {
-        CopyIn();   // GM → UB (DataCopy/DataCopyPad)
-        Compute();  // UB 上计算
-        CopyOut();  // UB → GM
+        for (int32_t i = 0; i < loopCount; i++) {
+            CopyIn(i);    // GM → UB
+            Compute(i);   // UB 上计算
+            CopyOut(i);   // UB → GM
+        }
     }
 };
 
-// 启动
-kernel<<<blockDim, nullptr, stream>>>(args...);
-aclrtSynchronizeStream(stream);
+extern "C" __global__ __aicore__ void op_name_custom(
+    GM_ADDR x, GM_ADDR z, GM_ADDR workspace, GM_ADDR tiling) {
+    KernelOp op;
+    op.Init(x, z, workspace, tiling);
+    op.Process();
+}
 ```
 
 ### Pipeline 同步
@@ -116,7 +165,7 @@ aclrtSynchronizeStream(stream);
 
 ### 关键模式
 - **Double Buffering**：`BUFFER_NUM = 2`，一块加载一块计算
-- **多核分发**：`GetBlockIdx()` 获取核 ID，`ACL_DEV_ATTR_*` 查询核数
+- **多核分发**：`GetBlockIdx()` 获取核 ID，TilingFunc 中设置 `SetBlockDim`
 - **Scalar 优化**：用 `Adds/Muls` 代替 `Duplicate + Add/Mul`
 
 ### 架构代号
@@ -126,57 +175,74 @@ aclrtSynchronizeStream(stream);
 
 ---
 
-## 编译
+## 构建与测试
 
-### Direct Invoke（直调模式）
+### 构建自定义算子工程
 ```bash
-cd workspace/runs/{op_name}/best
-mkdir -p build && cd build
-cmake .. -DASCEND_PRODUCT_TYPE={chip} -DASCEND_RUN_MODE=ONBOARD
-make -j
+# 生成工程骨架
+msopgen gen -i {op}_custom.json -c ai_core-Ascend910B -lan cpp -out {OpName}Custom
+
+# 构建
+cd {OpName}Custom && ./build.sh
+
+# 部署
+cd build_out && ./custom_opp_*.run
 ```
 
-### 运行
+### PyTorch 框架测试
 ```bash
-cd workspace/runs/{op_name}/best
-bash run.sh
+# 构建 Python 绑定
+cd workspace/runs/{op_name}/test/CppExtension
+bash build_and_run.sh
+
+# 正确性测试
+python3 scoring/test_correctness.py \
+    --reference workspace/runs/{op_name}/test/reference.py \
+    --config scoring/configs/{op_name}.json \
+    --output result.json
+
+# 性能测试
+python3 scoring/test_performance.py \
+    --reference workspace/runs/{op_name}/test/reference.py \
+    --config scoring/configs/{op_name}.json \
+    --output perf.json
+```
+
+### 完整评分流程
+```bash
+bash scoring/score.sh workspace/runs/{op_name}/attempts/step_0 scoring/configs/default.json
 ```
 
 ---
 
-## 测试标准
+## 精度标准
 
-### 精度阈值
 | dtype | rtol | atol |
 |-------|------|------|
 | FP32 | 1e-5 | 1e-5 |
 | FP16 | 1e-3 | 1e-3 |
 | BF16 | 1e-2 | 1e-2 |
 
-### 性能采集
-```bash
-msprof op --warm-up=10 --output=./msprof_output ./demo
-```
-
-### 性能标准
-| 指标 | 优秀 | 可改进 | 瓶颈 |
-|------|------|--------|------|
-| Task Duration vs 理论 | <20% gap | 20-50% | >50% |
-| 多核负载均衡 | <10% 方差 | 10-30% | >30% |
-| Double Buffer 重叠 | >30% | 10-30% | <10% |
-
 ---
 
 ## 进化流程
 
 ```
-supervisor.py 主循环:
-  1. 准备上下文 (谱系 P_t + 当前内核 x_t + 评分 f(x_t))
-  2. 启动 Kernel Evolution Agent 会话
-  3. Agent 执行 Edit-Evaluate-Diagnose 循环
-  4. 通过正确性 + 性能提升 → git commit → 更新谱系
-  5. 检测停滞 → 生成重定向指令
-  6. 循环直到停止条件
+Architect Agent 主循环（agents/architect/AGENT.md）:
+  1. READ STATE — 读取 evolution/state.json 和最新评分
+  2. ANALYZE — 分析谱系和 profiling 数据
+  3. DESIGN — 输出 DESIGN.md + PLAN.md
+  4. DISPATCH DEV — 分发给 Developer 实现
+  5. DISPATCH REV — 分发给 Reviewer 审查
+  6. DISPATCH TEST — 分发给 Tester 构建/部署/测试
+  7. EVALUATE — 分析结果，决定接受/拒绝
+  8. UPDATE STATE — 更新 state.json、谱系、best/
+  9. GOTO 1
+
+Supervisor Agent（仅在停滞时介入）:
+  - stall_counter >= threshold → 生成重定向指令
+  - failed_attempts >= threshold → 诊断失败模式
+  → 写入 evolution/redirects/，Architect 下轮读取
 ```
 
-评分函数：`scoring/score.sh workspace/runs/{op_name}/best scoring/configs/{op_name}.json` → `evolution/scores/v{N}.json`
+评分函数：`scoring/score.sh workspace/runs/{op_name}/attempts/step_{N} scoring/configs/{op_name}.json` → `evolution/scores/v{N}.json`

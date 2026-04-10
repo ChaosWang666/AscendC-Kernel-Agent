@@ -29,17 +29,17 @@
    - 识别关键计算操作
 
 2. **设计 Tiling 策略**
-   - 读取 `Knowledge-base/coding-skills/skills/skills/ascendc-tiling-design/SKILL.md`
+   - 读取 `.claude/skills/ascendc-tiling-design/SKILL.md`
    - 根据计算模式选择合适的 Tiling 方法
    - 确定多核分发策略
 
 3. **创建工程骨架**
-   - 读取 `Knowledge-base/coding-skills/skills/skills/ascendc-direct-invoke-template/SKILL.md`
+   - 读取 `.claude/skills/ascendc-direct-invoke-template/SKILL.md`
    - 在候选目录 `{{CANDIDATE_DIR}}/` 中创建目录结构
    - 生成 CMakeLists.txt、run.sh、gen_data.py、verify_result.py
 
 4. **实现 Kernel**
-   - 读取 `Knowledge-base/coding-skills/skills/skills/ascendc-api-best-practices/SKILL.md` 选择正确 API
+   - 读取 `.claude/skills/ascendc-api-best-practices/SKILL.md` 选择正确 API
    - 搜索 `Knowledge-base/coding-sources/programming-coding-sources/asc-devkit/examples/` 找类似示例
    - 实现 Init、Process（CopyIn/Compute/CopyOut）
    - 使用 EnQue/DeQue 同步

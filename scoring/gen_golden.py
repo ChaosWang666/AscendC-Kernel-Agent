@@ -45,6 +45,16 @@ def golden_layernorm(inputs: dict, config: dict) -> dict:
     return {"y": gamma * x_norm + beta}
 
 
+def golden_gelu(inputs: dict, config: dict) -> dict:
+    """GELU 激活（tanh 近似，与 AscendC::Gelu 硬件实现一致）
+    gelu(x) ≈ 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
+    """
+    x = inputs["x"].astype(np.float64)  # 用 float64 计算减少累积误差
+    sqrt_2_over_pi = np.sqrt(2.0 / np.pi)
+    y = 0.5 * x * (1.0 + np.tanh(sqrt_2_over_pi * (x + 0.044715 * x ** 3)))
+    return {"y": y.astype(inputs["x"].dtype)}
+
+
 def golden_flash_attention(inputs: dict, config: dict) -> dict:
     """Flash Attention (参考实现，非优化)"""
     q = inputs["q"]  # [B, H, S, D]
@@ -75,6 +85,7 @@ def golden_flash_attention(inputs: dict, config: dict) -> dict:
 # 算子注册表
 GOLDEN_REGISTRY = {
     "add_custom": golden_add,
+    "gelu": golden_gelu,
     "softmax": golden_softmax,
     "layernorm": golden_layernorm,
     "layer_norm": golden_layernorm,
@@ -122,6 +133,10 @@ def generate_input_data(config: dict) -> dict:
         norm_shape = shape[-1:]
         inputs["gamma"] = np.ones(norm_shape, dtype=np_dtype)
         inputs["beta"] = np.zeros(norm_shape, dtype=np_dtype)
+
+    elif "gelu" in op_name:
+        shape = tuple(config.get("shape", [1024]))
+        inputs["x"] = np.random.randn(*shape).astype(np_dtype)
 
     elif "softmax" in op_name:
         shape = tuple(config.get("shape", [1024]))

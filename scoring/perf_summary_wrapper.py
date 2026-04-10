@@ -30,14 +30,35 @@ from pathlib import Path
 
 
 def parse_msprof_csv(msprof_dir: str) -> list:
-    """解析 msprof 输出目录中的 CSV 文件"""
+    """解析 msprof 输出目录中的 CSV 文件
+
+    支持两种输出格式:
+    1. 旧格式: device_*/summary/*.csv
+    2. 新格式 (msprof op): OPPROF_*/OpBasicInfo.csv + PipeUtilization.csv
+    """
     results = []
 
-    # msprof 通常输出到 device_*/summary/ 目录
-    summary_dirs = list(Path(msprof_dir).rglob("summary"))
+    # 方式 1: 新格式 — 解析 OpBasicInfo.csv (全局信息) + PipeUtilization.csv (per-block)
+    for basic_csv in Path(msprof_dir).rglob("OpBasicInfo.csv"):
+        try:
+            with open(basic_csv, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    result = parse_op_row(row)
+                    if result:
+                        # 补充 PipeUtilization 数据（取所有 block 的均值）
+                        pipe_csv = basic_csv.parent / "PipeUtilization.csv"
+                        if pipe_csv.exists():
+                            _merge_pipe_utilization(result, pipe_csv)
+                        results.append(result)
+        except Exception as e:
+            print(f"  解析 {basic_csv} 失败: {e}")
 
-    for summary_dir in summary_dirs:
-        # 解析 op_summary CSV
+    if results:
+        return results
+
+    # 方式 2: 旧格式 — device_*/summary/*.csv
+    for summary_dir in Path(msprof_dir).rglob("summary"):
         for csv_file in summary_dir.glob("*.csv"):
             try:
                 with open(csv_file, newline="", encoding="utf-8") as f:
@@ -50,6 +71,34 @@ def parse_msprof_csv(msprof_dir: str) -> list:
                 print(f"  解析 {csv_file} 失败: {e}")
 
     return results
+
+
+def _merge_pipe_utilization(result: dict, pipe_csv: Path):
+    """从 PipeUtilization.csv 聚合 per-block 管线利用率到 result"""
+    try:
+        ratios = {"vec": [], "mte2": [], "mte3": [], "scalar": [], "cube": []}
+        with open(pipe_csv, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # 新格式列名: aiv_vec_ratio, aiv_mte2_ratio, etc.
+                for key_prefix, field in [
+                    ("aiv_vec_ratio", "vec"), ("aiv_mte2_ratio", "mte2"),
+                    ("aiv_mte3_ratio", "mte3"), ("aiv_scalar_ratio", "scalar"),
+                    ("aic_cube_ratio", "cube"),
+                ]:
+                    val = row.get(key_prefix, "NA")
+                    if val and val != "NA":
+                        try:
+                            ratios[field].append(float(val))
+                        except ValueError:
+                            pass
+
+        for field, vals in ratios.items():
+            if vals:
+                avg = sum(vals) / len(vals)
+                result[f"{field}_ratio"] = avg
+    except Exception as e:
+        print(f"  解析 PipeUtilization 失败: {e}")
 
 
 def parse_op_row(row: dict) -> dict:
