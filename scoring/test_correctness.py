@@ -70,14 +70,76 @@ def extract_configs(test_config, levels):
     return all_configs
 
 
-def test_single_config(ref_module, config, device, synchronize):
-    """对单个配置运行正确性测试"""
+def _resolve_thresholds(config, test_config):
+    """Resolve rtol/atol for a single config in precedence order:
+       1. per-config explicit rtol/atol
+       2. test-config top-level default_rtol/default_atol
+       3. dtype-based PRECISION_THRESHOLDS defaults
+    """
+    dtype_str = config.get("dtype", "fp32")
+    defaults = PRECISION_THRESHOLDS.get(dtype_str, {"rtol": 1e-3, "atol": 1e-3})
+    atol = config.get(
+        "atol", test_config.get("default_atol", defaults["atol"])
+    )
+    rtol = config.get(
+        "rtol", test_config.get("default_rtol", defaults["rtol"])
+    )
+    return float(atol), float(rtol)
+
+
+def _first_mismatch_details(ref, new, atol, rtol, max_elements=5):
+    """Return a small dict describing the first few element mismatches."""
     import torch
 
-    dtype_str = config.get("dtype", "fp32")
-    thresholds = PRECISION_THRESHOLDS.get(dtype_str, {"rtol": 1e-3, "atol": 1e-3})
-    atol = thresholds["atol"]
-    rtol = thresholds["rtol"]
+    diff = (ref - new).abs()
+    tol = atol + rtol * ref.abs()
+    mismatch_mask = diff > tol
+    if not mismatch_mask.any():
+        return None
+
+    # Flatten, find first mismatching index in flattened space
+    flat_mask = mismatch_mask.flatten()
+    flat_ref = ref.flatten()
+    flat_new = new.flatten()
+    flat_diff = diff.flatten()
+
+    mismatch_indices = torch.nonzero(flat_mask, as_tuple=False).flatten()
+    n_mismatch = mismatch_indices.numel()
+    sample = mismatch_indices[:max_elements].tolist()
+
+    samples = []
+    for flat_idx in sample:
+        # Unravel flat_idx → multi-dim index in ref.shape
+        multi_idx = []
+        rem = int(flat_idx)
+        for dim in reversed(ref.shape):
+            multi_idx.append(rem % int(dim))
+            rem //= int(dim)
+        multi_idx.reverse()
+        samples.append({
+            "index": multi_idx,
+            "ref": float(flat_ref[flat_idx].item()),
+            "new": float(flat_new[flat_idx].item()),
+            "abs_diff": float(flat_diff[flat_idx].item()),
+        })
+
+    return {
+        "mismatch_count": int(n_mismatch),
+        "total_elements": int(ref.numel()),
+        "mismatch_ratio": float(n_mismatch / ref.numel()),
+        "first_mismatches": samples,
+    }
+
+
+def test_single_config(ref_module, config, device, synchronize, test_config=None):
+    """对单个配置运行正确性测试。
+
+    test_config: 顶层 JSON dict（含 default_rtol / default_atol）可选 —
+    若提供则传入 _resolve_thresholds 以支持全局默认覆盖。
+    """
+    import torch
+
+    atol, rtol = _resolve_thresholds(config, test_config or {})
 
     get_inputs = ref_module.get_inputs
     get_init_inputs = ref_module.get_init_inputs
@@ -88,6 +150,8 @@ def test_single_config(ref_module, config, device, synchronize):
         "passed": True,
         "max_abs_error": 0.0,
         "max_rel_error": 0.0,
+        "atol": atol,
+        "rtol": rtol,
         "error": None,
     }
 
@@ -148,6 +212,23 @@ def test_single_config(ref_module, config, device, synchronize):
                         f"Value mismatch at trial {trial}: "
                         f"max_abs={max_abs:.6e}, max_rel={max_rel:.6e}"
                     )
+                    # Add detailed first-mismatch diagnostics for debugging
+                    details = _first_mismatch_details(
+                        ref_output, new_output, atol, rtol, max_elements=5
+                    )
+                    if details:
+                        result["mismatch_details"] = details
+                        result["mismatch_details"]["trial"] = trial
+                    # Reference statistics help the Architect judge whether
+                    # the kernel is "close" or "completely wrong"
+                    result["ref_stats"] = {
+                        "mean_abs": float(ref_output.abs().mean().item()),
+                        "max_abs": float(ref_output.abs().max().item()),
+                    }
+                    result["new_stats"] = {
+                        "mean_abs": float(new_output.abs().mean().item()),
+                        "max_abs": float(new_output.abs().max().item()),
+                    }
                     break
                 else:
                     # 记录通过时的误差供诊断
@@ -215,21 +296,31 @@ def main():
 
         print(f"  [{level}/{config_name}] 测试中...")
 
-        result = test_single_config(ref_module, config, device, synchronize)
+        result = test_single_config(ref_module, config, device, synchronize, test_config)
 
         correctness = 1 if result["passed"] else 0
         if correctness:
             pass_count += 1
 
-        all_results.append({
+        cfg_entry = {
             "name": config_name,
             "level": level,
             "dtype": dtype,
             "correctness": correctness,
+            "atol": result.get("atol"),
+            "rtol": result.get("rtol"),
             "max_abs_error": result.get("max_abs_error", 0.0),
             "max_rel_error": result.get("max_rel_error", 0.0),
             "error": result.get("error"),
-        })
+        }
+        # Optional diagnostic fields (only present on mismatch)
+        if "mismatch_details" in result:
+            cfg_entry["mismatch_details"] = result["mismatch_details"]
+        if "ref_stats" in result:
+            cfg_entry["ref_stats"] = result["ref_stats"]
+        if "new_stats" in result:
+            cfg_entry["new_stats"] = result["new_stats"]
+        all_results.append(cfg_entry)
 
         status = "PASS" if correctness else "FAIL"
         error_info = f" ({result['error'][:100]})" if result.get("error") else ""

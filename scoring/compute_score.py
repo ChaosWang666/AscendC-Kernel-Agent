@@ -159,17 +159,25 @@ def main():
             correctness = json.load(f)
         score["correctness_total"] = correctness.get("correctness_total", 0.0)
 
-        # 合并 config 级别结果
+        # 合并 config 级别结果；保留诊断字段（atol/rtol/mismatch_details/ref_stats/new_stats）
+        # 只有在失败时才存在，Architect 需要它们做定位
+        diagnostic_keys = (
+            "atol", "rtol", "error",
+            "mismatch_details", "ref_stats", "new_stats",
+            "mean_abs_error", "mismatch_ratio",
+        )
         for c in correctness.get("configs", []):
-            score["configs"].append({
+            entry = {
                 "name": c.get("name", "unknown"),
                 "level": c.get("level", "unknown"),
                 "correctness": c.get("correctness", 0),
                 "max_abs_error": c.get("max_abs_error", 0.0),
                 "max_rel_error": c.get("max_rel_error", 0.0),
-                "mean_abs_error": c.get("mean_abs_error", 0.0),
-                "mismatch_ratio": c.get("mismatch_ratio", 0.0),
-            })
+            }
+            for k in diagnostic_keys:
+                if k in c and c[k] is not None:
+                    entry[k] = c[k]
+            score["configs"].append(entry)
 
     # 如果正确性未通过，性能评分为 0
     if score["correctness_total"] < 1.0:
