@@ -69,7 +69,17 @@ ls evolution/scores/
 - **瓶颈分布**：最近 profiling 数据中反复出现的瓶颈
 - **失败模式**：连续失败的共同原因
 
-### Step 3: 生成重定向指令
+### Step 3: 生成重定向指令（按 verdict 分类）
+
+Supervisor 的输出必须选择一个明确的 **verdict**，不同 verdict 对应不同的 Architect 响应：
+
+| verdict | 语义 | Architect 响应 |
+|---------|------|---------------|
+| `REDIRECT` | 指出新的优化方向，Architect 继续主循环 | 按建议调整下一轮 DESIGN |
+| `ABORT`    | 当前失败不可由 Agent 修复（环境问题、依赖缺失、超出框架能力） | 立即退出主循环，等待外部修复 |
+| `TERMINATE_SUCCESS` | 目标已达成（如达到 target_performance） | 停止进化，输出终止报告 |
+
+#### REDIRECT 情况
 
 写入 `evolution/redirects/step_{N}.md`：
 
@@ -77,18 +87,74 @@ ls evolution/scores/
 # Supervisor 重定向指令 — Step {N}
 
 ## 触发原因
-{停滞类型和具体数据}
+{stall | failure | exploration_loop}：具体数据（counters、最近 N 版本的评分）
 
 ## 进化轨迹分析
-{已尝试方向总结，失败模式分析}
+{已尝试方向总结、瓶颈分布、失败模式}
 
 ## 建议探索方向
-{1-2 个尚未充分探索的优化方向}
+{1-2 个尚未充分探索的方向}
 
-## 约束
-- 这是方向性建议，Architect 可以根据具体情况调整
-- 不要重复已经失败的方向：{列出已失败方向}
+## 不要再尝试的方向
+{已失败方向列表}
+
+---
+supervisor_trailer:
+  verdict: REDIRECT
+  trigger: stall | failure | exploration_loop
+  trigger_snapshot:
+    current_version: <int>
+    stall_counter: <int>
+    failed_attempts: <int>
+    consecutive_redirects: <int>
+    total_attempts: <int>
+  recommended_directions:
+    - <direction 1 short description>
+    - <direction 2 short description>
+  forbidden_directions:
+    - <previously failed direction>
+  fixable_by_agent: true
+---
 ```
+
+#### ABORT 情况
+
+当失败**根本性不可由 Agent 修复**时（典型：环境权限、外部依赖缺失、硬件问题），写入 `evolution/redirects/step_{N}.md`：
+
+```markdown
+# Supervisor ABORT 指令 — Step {N}
+
+## 触发原因
+{failure_category}：failed_attempts 已达阈值，但根因在 Agent 能力范围外
+
+## 根因定位
+{结构化根因分析：文件/权限/依赖/日志关键证据，标明证据级别 HIGH/MEDIUM/LOW}
+
+## 为什么 Agent 无法修复
+{列举 3-5 条具体原因}
+
+## 需要外部（人工）执行的动作
+{具体 shell 命令或配置变更}
+
+## 恢复流程
+{环境修好后如何重置 state.json 和 lineage}
+
+---
+supervisor_trailer:
+  verdict: ABORT
+  trigger: failure
+  fixable_by_agent: false
+  root_cause_category: environment | dependency | hardware | permission | external_service
+  required_out_of_band_actions:
+    - <command 1>
+    - <command 2>
+  resumption_precondition: <string description>
+---
+```
+
+#### TERMINATE_SUCCESS 情况
+
+见下方「终止判断」节。
 
 **重定向指令原则**：
 - 提供**未探索的方向**，而非已失败方向的变体
@@ -96,16 +162,23 @@ ls evolution/scores/
 - 参考 profiling 数据，指出最大的未优化瓶颈
 - 考虑**跨层优化**（Tiling + Pipeline + 数据布局的联合优化）
 
-### Step 4: 更新状态
+### Step 4: （不）更新 state.json
 
-```python
-# 更新 state.json
-state['consecutive_redirects'] += 1
+**所有 state.json 字段均由 Architect 独占写权限。Supervisor 不直接写 state.json。**
 
-# 如果连续重定向超过阈值，建议停止
-if state['consecutive_redirects'] >= max_consecutive_redirects:
-    # 输出最终报告，建议终止进化
-```
+`consecutive_redirects` 在下一轮 Architect 的 Step 8 UPDATE STATE 中递增（Architect 读取新生成的 redirect 文件后自行更新计数）。这避免了 Supervisor / Architect 两个 agent 对同一 JSON 的并发写入。
+
+### Step 5: Seed 阶段（`current_version = -1` 或 `total_attempts = 1`）的特殊处理
+
+当 Supervisor 在 seed 阶段首次被激活（典型：v0 一次尝试就失败），**没有 lineage 可以做"探索方向分析"**。此时 Supervisor 的分析降级为**单次失败 post-mortem**：
+
+1. 读取 `evolution/scores/v0.json`，检查 `failure_type`（compile / deploy / pybind / correctness / performance）
+2. 读取 `evolution/logs/step_0.md` 的失败细节
+3. 判断是结构性失败（Developer/Reviewer 能修）还是环境失败（Agent 不能修）
+4. 结构性 → 生成 `verdict: REDIRECT` 指示 Architect 降低 v0 目标或换 Tiling
+5. 环境性 → 生成 `verdict: ABORT` 并给出外部修复步骤
+
+seed 阶段 Supervisor **不应该**尝试做"多版本轨迹分析"。
 
 ## 终止判断
 
@@ -157,7 +230,8 @@ evolution/
 
 - **禁止**直接修改 Architect 的决策或代码
 - **禁止**直接调用 Developer / Reviewer / Tester
-- **禁止**修改 state.json 中 Architect 管理的字段（仅更新 consecutive_redirects）
+- **禁止**修改 state.json 任何字段（Architect 独占写权限；`consecutive_redirects` 由 Architect 在下一轮 ANALYZE 后递增）
 - **禁止**在非停滞状态下主动介入
-- **必须**在重定向指令中说明触发原因和分析依据
-- **必须**追踪 consecutive_redirects，超过阈值则建议终止
+- **必须**在重定向指令末尾附加机器可读的 YAML `supervisor_trailer`
+- **必须**明确选择 verdict: REDIRECT / ABORT / TERMINATE_SUCCESS 之一
+- **必须**在 seed 阶段（total_attempts == 1）只做单次失败 post-mortem，不做轨迹分析
