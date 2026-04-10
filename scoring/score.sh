@@ -2,6 +2,7 @@
 # score.sh — 分级评分总编排
 #
 # 自定义算子工程评分流程:
+#   0. env_preflight — 环境预检（python/torch_npu/setuptools/CANN 基础就绪）
 #   1. compile.sh    — 构建自定义算子工程（msopgen + build.sh）
 #   2. deploy.sh     — 部署算子包（.run 安装器）
 #   3. build_pybind.sh — 构建 Python 绑定（CppExtension）
@@ -16,12 +17,17 @@
 #
 # 退出码契约（供 Architect / Supervisor / CI 消费）:
 #   0 — 完整 pipeline 成功（v{N}.json 已聚合，correctness_total == 1.0）
+#   1 — environment 预检失败 (failure_type=environment) — 外部修复需要
 #   2 — compile 阶段失败     (failure_type=compile)
 #   3 — deploy 阶段失败      (failure_type=deploy)
 #   4 — pybind 阶段失败      (failure_type=pybind)
 #   5 — correctness 阶段失败 (failure_type=correctness)
 #   6 — performance 阶段失败 (failure_type=performance, 未实现：当前仅记录不退出)
 # 所有失败情况都会写 v{N}.json 供后续分析；Architect 可同时依赖退出码和 failure_type。
+#
+# 副产物：
+#   - evolution/logs/step_{N}/{compile,deploy,pybind,preflight}.log — 按阶段落地
+#   - evolution/scores/v{N}.json.phase_timings — 每阶段 wall-clock（秒）
 
 set -euo pipefail
 
@@ -77,13 +83,20 @@ SCORES_DIR="$PROJECT_ROOT/evolution/scores"
 mkdir -p "$SCORES_DIR"
 SCORE_JSON="$SCORES_DIR/v${VERSION}.json"
 
-# 临时结果
+# 持久化日志目录（按 version 分组，不随 trap 清理消失）
+LOG_DIR="$PROJECT_ROOT/evolution/logs/step_${VERSION}"
+mkdir -p "$LOG_DIR"
+
+# 临时 JSON 中间结果（短生命周期，不需要留）
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
 
-COMPILE_LOG="$TMPDIR/compile.log"
-DEPLOY_LOG="$TMPDIR/deploy.log"
-PYBIND_LOG="$TMPDIR/pybind.log"
+PREFLIGHT_LOG="$LOG_DIR/preflight.log"
+COMPILE_LOG="$LOG_DIR/compile.log"
+DEPLOY_LOG="$LOG_DIR/deploy.log"
+PYBIND_LOG="$LOG_DIR/pybind.log"
+CORRECTNESS_LOG="$LOG_DIR/correctness.log"
+PERFORMANCE_LOG="$LOG_DIR/performance.log"
 CORRECTNESS_SMOKE="$TMPDIR/correctness_smoke.json"
 CORRECTNESS_REP="$TMPDIR/correctness_rep.json"
 CORRECTNESS_STRESS="$TMPDIR/correctness_stress.json"
@@ -91,11 +104,38 @@ CORRECTNESS_ALL="$TMPDIR/correctness_all.json"
 PERFORMANCE_REP="$TMPDIR/performance_rep.json"
 PERFORMANCE_STRESS="$TMPDIR/performance_stress.json"
 PERFORMANCE_ALL="$TMPDIR/performance_all.json"
+PHASE_TIMINGS_FILE="$TMPDIR/phase_timings.json"
 
 LEVELS_RUN=""
 DEPLOY_DIR="$PROJECT_ROOT/workspace/deploy/opp"
 CPP_EXT_DIR="$PROJECT_ROOT/workspace/runs/$OP_NAME/test/CppExtension"
 REFERENCE_PY="$PROJECT_ROOT/workspace/runs/$OP_NAME/test/reference.py"
+
+# ==== Phase timing helpers ====
+PHASE_START_TS=0
+declare -A PHASE_TIMINGS_MAP
+phase_begin() {
+    PHASE_START_TS=$(date +%s%3N)
+}
+phase_end() {
+    local phase="$1"
+    local end_ts
+    end_ts=$(date +%s%3N)
+    local duration_ms=$((end_ts - PHASE_START_TS))
+    local duration_sec
+    duration_sec=$(python3 -c "print(round($duration_ms/1000.0, 3))")
+    PHASE_TIMINGS_MAP["$phase"]=$duration_sec
+    echo "  [timing] $phase: ${duration_sec}s"
+}
+dump_phase_timings() {
+    python3 -c "
+import json, sys
+data = {}
+$(for k in "${!PHASE_TIMINGS_MAP[@]}"; do echo "data['$k'] = ${PHASE_TIMINGS_MAP[$k]}"; done)
+with open('$PHASE_TIMINGS_FILE', 'w') as f:
+    json.dump(data, f)
+"
+}
 
 echo "========================================"
 echo "分级评分 (v${VERSION})"
@@ -104,40 +144,104 @@ echo "  配置: $CONFIG_PATH"
 echo "  指标: $METRIC_TYPE"
 echo "  最佳: $BEST_SCORE"
 echo "  模式: 自定义算子工程"
+echo "  日志目录: $LOG_DIR"
 echo "========================================"
+
+# ============ Step 0: 环境预检 ============
+echo ""
+echo ">>> Step 0: 环境预检（env preflight）"
+phase_begin
+# 检查 Python 打包工具链（setuptools / _distutils_hack / pip）
+# 注意：env_setup.sh 上方已经 source 过，所以 LD_LIBRARY_PATH 等应当就绪
+python3 -c "
+import sys
+errors = []
+try:
+    import torch
+except Exception as e:
+    errors.append(('torch', str(e)))
+try:
+    import torch_npu
+    if not torch_npu.npu.is_available():
+        errors.append(('torch_npu', 'NPU not available'))
+except Exception as e:
+    errors.append(('torch_npu', str(e)))
+try:
+    from setuptools import setup, find_packages
+    import _distutils_hack
+    import pip
+except Exception as e:
+    errors.append(('packaging', str(e)))
+import os
+if not os.environ.get('ASCEND_HOME_PATH'):
+    errors.append(('cann', 'ASCEND_HOME_PATH not set'))
+
+if errors:
+    for name, msg in errors:
+        print(f'PREFLIGHT FAIL [{name}]: {msg}', file=sys.stderr)
+    sys.exit(1)
+print('preflight OK')
+" > "$PREFLIGHT_LOG" 2>&1
+PREFLIGHT_RC=$?
+phase_end "preflight"
+if [ $PREFLIGHT_RC -ne 0 ]; then
+    echo "环境预检失败"
+    cat "$PREFLIGHT_LOG" | tail -20
+    dump_phase_timings
+    python3 "$SCRIPT_DIR/compute_score.py" \
+        --version "$VERSION" \
+        --failure-stage environment \
+        --compile-error "$PREFLIGHT_LOG" \
+        --phase-timings "$PHASE_TIMINGS_FILE" \
+        --metric-type "$METRIC_TYPE" \
+        --output "$SCORE_JSON"
+    echo "评分结果: $SCORE_JSON"
+    exit 1  # environment stage failure
+fi
+echo "环境预检通过"
 
 # ============ Step 1: 构建自定义算子工程 ============
 echo ""
 echo ">>> Step 1: 构建自定义算子工程"
+phase_begin
 if ! bash "$SCRIPT_DIR/compile.sh" "$OP_PATH" > "$COMPILE_LOG" 2>&1; then
+    phase_end "compile"
     echo "构建失败"
     cat "$COMPILE_LOG" | tail -20
+    dump_phase_timings
     python3 "$SCRIPT_DIR/compute_score.py" \
         --version "$VERSION" \
         --failure-stage compile \
         --compile-error "$COMPILE_LOG" \
+        --phase-timings "$PHASE_TIMINGS_FILE" \
         --metric-type "$METRIC_TYPE" \
         --output "$SCORE_JSON"
     echo "评分结果: $SCORE_JSON"
     exit 2  # compile stage failure
 fi
+phase_end "compile"
 echo "构建成功"
 
 # ============ Step 2: 部署算子包 ============
 echo ""
 echo ">>> Step 2: 部署算子包"
+phase_begin
 if ! bash "$SCRIPT_DIR/deploy.sh" "$OP_PATH" "$DEPLOY_DIR" > "$DEPLOY_LOG" 2>&1; then
+    phase_end "deploy"
     echo "部署失败"
     cat "$DEPLOY_LOG" | tail -20
+    dump_phase_timings
     python3 "$SCRIPT_DIR/compute_score.py" \
         --version "$VERSION" \
         --failure-stage deploy \
         --compile-error "$DEPLOY_LOG" \
+        --phase-timings "$PHASE_TIMINGS_FILE" \
         --metric-type "$METRIC_TYPE" \
         --output "$SCORE_JSON"
     echo "评分结果: $SCORE_JSON"
     exit 3  # deploy stage failure
 fi
+phase_end "deploy"
 
 # 设置部署后的环境变量
 CUSTOM_OPP_PATH="$DEPLOY_DIR/vendors/customize"
@@ -150,22 +254,28 @@ echo "部署成功"
 # ============ Step 3: 构建 Python 绑定 ============
 echo ""
 echo ">>> Step 3: 构建 Python 绑定"
+phase_begin
 if [ -d "$CPP_EXT_DIR" ]; then
     if ! bash "$SCRIPT_DIR/build_pybind.sh" "$CPP_EXT_DIR" "$DEPLOY_DIR" > "$PYBIND_LOG" 2>&1; then
+        phase_end "pybind"
         echo "Python 绑定构建失败"
         cat "$PYBIND_LOG" | tail -20
+        dump_phase_timings
         python3 "$SCRIPT_DIR/compute_score.py" \
             --version "$VERSION" \
             --failure-stage pybind \
             --compile-error "$PYBIND_LOG" \
+            --phase-timings "$PHASE_TIMINGS_FILE" \
             --metric-type "$METRIC_TYPE" \
             --output "$SCORE_JSON"
         echo "评分结果: $SCORE_JSON"
         exit 4  # pybind stage failure
     fi
+    phase_end "pybind"
     echo "Python 绑定构建成功"
     USE_PYTORCH=true
 else
+    phase_end "pybind"
     echo "未找到 CppExtension 目录，使用兼容模式"
     USE_PYTORCH=false
 fi
@@ -173,9 +283,11 @@ fi
 # ============ Step 4: Smoke 正确性 ============
 echo ""
 echo ">>> Step 4: Smoke 正确性测试"
+phase_begin
 if [ "$USE_PYTORCH" = true ] && [ -f "$REFERENCE_PY" ]; then
     bash "$SCRIPT_DIR/test_correctness.sh" \
-        "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_SMOKE" "smoke" "$REFERENCE_PY"
+        "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_SMOKE" "smoke" "$REFERENCE_PY" \
+        >> "$CORRECTNESS_LOG" 2>&1
 else
     # 兼容模式
     GOLDEN_DIR="$OP_PATH/golden_data"
@@ -186,7 +298,8 @@ else
             --output-dir "$GOLDEN_DIR"
     fi
     bash "$SCRIPT_DIR/test_correctness.sh" \
-        "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_SMOKE" "smoke"
+        "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_SMOKE" "smoke" \
+        >> "$CORRECTNESS_LOG" 2>&1
 fi
 LEVELS_RUN="smoke"
 
@@ -197,28 +310,35 @@ print(r.get('correctness_total', 0.0))
 " 2>/dev/null || echo "0.0")
 
 if [ "$(python3 -c "print(1 if float('$SMOKE_PASS') < 1.0 else 0)")" = "1" ]; then
+    phase_end "correctness_smoke"
     echo "Smoke 正确性失败 ($SMOKE_PASS)，提前退出"
+    dump_phase_timings
     python3 "$SCRIPT_DIR/compute_score.py" \
         --version "$VERSION" \
         --failure-stage correctness \
         --correctness-result "$CORRECTNESS_SMOKE" \
+        --phase-timings "$PHASE_TIMINGS_FILE" \
         --metric-type "$METRIC_TYPE" \
         --test-levels "$LEVELS_RUN" \
         --output "$SCORE_JSON"
     echo "评分结果: $SCORE_JSON"
     exit 5  # correctness stage failure
 fi
+phase_end "correctness_smoke"
 echo "Smoke 正确性通过"
 
 # ============ Step 5: Representative 正确性 ============
 echo ""
 echo ">>> Step 5: Representative 正确性测试"
+phase_begin
 if [ "$USE_PYTORCH" = true ] && [ -f "$REFERENCE_PY" ]; then
     bash "$SCRIPT_DIR/test_correctness.sh" \
-        "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_REP" "representative" "$REFERENCE_PY"
+        "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_REP" "representative" "$REFERENCE_PY" \
+        >> "$CORRECTNESS_LOG" 2>&1
 else
     bash "$SCRIPT_DIR/test_correctness.sh" \
-        "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_REP" "representative"
+        "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_REP" "representative" \
+        >> "$CORRECTNESS_LOG" 2>&1
 fi
 LEVELS_RUN="smoke,representative"
 
@@ -229,6 +349,7 @@ print(r.get('correctness_total', 0.0))
 " 2>/dev/null || echo "0.0")
 
 if [ "$(python3 -c "print(1 if float('$REP_PASS') < 1.0 else 0)")" = "1" ]; then
+    phase_end "correctness_representative"
     echo "Representative 正确性失败 ($REP_PASS)，提前退出"
     python3 -c "
 import json
@@ -242,16 +363,19 @@ merged = {
 }
 with open('$CORRECTNESS_ALL', 'w') as f: json.dump(merged, f, indent=2)
 "
+    dump_phase_timings
     python3 "$SCRIPT_DIR/compute_score.py" \
         --version "$VERSION" \
         --failure-stage correctness \
         --correctness-result "$CORRECTNESS_ALL" \
+        --phase-timings "$PHASE_TIMINGS_FILE" \
         --metric-type "$METRIC_TYPE" \
         --test-levels "$LEVELS_RUN" \
         --output "$SCORE_JSON"
     echo "评分结果: $SCORE_JSON"
     exit 5  # correctness stage failure
 fi
+phase_end "correctness_representative"
 echo "Representative 正确性通过"
 
 # ============ Step 6: 合并正确性结果 ============
@@ -271,13 +395,17 @@ with open('$CORRECTNESS_ALL', 'w') as f: json.dump(merged, f, indent=2)
 # ============ Step 7: Representative 性能 ============
 echo ""
 echo ">>> Step 7: Representative 性能测试"
+phase_begin
 if [ "$USE_PYTORCH" = true ] && [ -f "$REFERENCE_PY" ]; then
     bash "$SCRIPT_DIR/test_performance.sh" \
-        "$OP_PATH" "$CONFIG_PATH" "$PERFORMANCE_REP" "$METRIC_TYPE" "$REFERENCE_PY"
+        "$OP_PATH" "$CONFIG_PATH" "$PERFORMANCE_REP" "$METRIC_TYPE" "$REFERENCE_PY" \
+        >> "$PERFORMANCE_LOG" 2>&1
 else
     bash "$SCRIPT_DIR/test_performance.sh" \
-        "$OP_PATH" "$CONFIG_PATH" "$PERFORMANCE_REP" "$METRIC_TYPE"
+        "$OP_PATH" "$CONFIG_PATH" "$PERFORMANCE_REP" "$METRIC_TYPE" \
+        >> "$PERFORMANCE_LOG" 2>&1
 fi
+phase_end "performance_representative"
 
 # 检查是否满足提交门槛
 SHOULD_RUN_STRESS=$(python3 -c "
@@ -303,13 +431,15 @@ if [ "$SHOULD_RUN_STRESS" = "yes" ]; then
     echo ""
     echo ">>> Step 8: Stress 正确性 + 性能测试（满足提交门槛）"
     LEVELS_RUN="smoke,representative,stress"
-
+    phase_begin
     if [ "$USE_PYTORCH" = true ] && [ -f "$REFERENCE_PY" ]; then
         bash "$SCRIPT_DIR/test_correctness.sh" \
-            "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_STRESS" "stress" "$REFERENCE_PY"
+            "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_STRESS" "stress" "$REFERENCE_PY" \
+            >> "$CORRECTNESS_LOG" 2>&1
     else
         bash "$SCRIPT_DIR/test_correctness.sh" \
-            "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_STRESS" "stress"
+            "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_STRESS" "stress" \
+            >> "$CORRECTNESS_LOG" 2>&1
     fi
 
     STRESS_PASS=$(python3 -c "
@@ -319,6 +449,7 @@ print(r.get('correctness_total', 0.0))
 " 2>/dev/null || echo "0.0")
 
     if [ "$(python3 -c "print(1 if float('$STRESS_PASS') < 1.0 else 0)")" = "1" ]; then
+        phase_end "correctness_stress"
         echo "Stress 正确性失败"
         python3 -c "
 import json
@@ -331,6 +462,7 @@ prev['correctness_total'] = prev['passed'] / prev['total'] if prev['total'] > 0 
 with open('$CORRECTNESS_ALL', 'w') as f: json.dump(prev, f, indent=2)
 "
     else
+        phase_end "correctness_stress"
         python3 -c "
 import json
 with open('$CORRECTNESS_ALL') as f: prev = json.load(f)
@@ -341,13 +473,17 @@ prev['passed'] += st['passed']
 prev['correctness_total'] = 1.0
 with open('$CORRECTNESS_ALL', 'w') as f: json.dump(prev, f, indent=2)
 "
+        phase_begin
         if [ "$USE_PYTORCH" = true ] && [ -f "$REFERENCE_PY" ]; then
             bash "$SCRIPT_DIR/test_performance.sh" \
-                "$OP_PATH" "$CONFIG_PATH" "$PERFORMANCE_STRESS" "$METRIC_TYPE" "$REFERENCE_PY"
+                "$OP_PATH" "$CONFIG_PATH" "$PERFORMANCE_STRESS" "$METRIC_TYPE" "$REFERENCE_PY" \
+                >> "$PERFORMANCE_LOG" 2>&1
         else
             bash "$SCRIPT_DIR/test_performance.sh" \
-                "$OP_PATH" "$CONFIG_PATH" "$PERFORMANCE_STRESS" "$METRIC_TYPE"
+                "$OP_PATH" "$CONFIG_PATH" "$PERFORMANCE_STRESS" "$METRIC_TYPE" \
+                >> "$PERFORMANCE_LOG" 2>&1
         fi
+        phase_end "performance_stress"
     fi
 
     # 合并性能结果
@@ -371,10 +507,12 @@ fi
 # ============ Step 9: 聚合评分 ============
 echo ""
 echo ">>> Step 9: 聚合评分"
+dump_phase_timings
 python3 "$SCRIPT_DIR/compute_score.py" \
     --version "$VERSION" \
     --correctness-result "$CORRECTNESS_ALL" \
     --performance-result "$PERFORMANCE_ALL" \
+    --phase-timings "$PHASE_TIMINGS_FILE" \
     --metric-type "$METRIC_TYPE" \
     --best-score "$BEST_SCORE" \
     --test-levels "$LEVELS_RUN" \
@@ -383,5 +521,6 @@ python3 "$SCRIPT_DIR/compute_score.py" \
 echo ""
 echo "========================================"
 echo "评分完成: $SCORE_JSON"
+echo "日志目录: $LOG_DIR"
 cat "$SCORE_JSON" | python3 -m json.tool 2>/dev/null || cat "$SCORE_JSON"
 echo "========================================"

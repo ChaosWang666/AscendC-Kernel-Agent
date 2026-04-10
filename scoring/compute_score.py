@@ -87,8 +87,10 @@ def main():
     parser.add_argument("--performance-result", help="性能结果 JSON")
     parser.add_argument("--compile-error", help="失败阶段的日志文件（与 --failure-stage 搭配使用）")
     parser.add_argument("--failure-stage",
-                        choices=["compile", "deploy", "pybind", "correctness", "performance"],
-                        help="失败发生的具体阶段（compile/deploy/pybind/correctness/performance）")
+                        choices=["environment", "compile", "deploy", "pybind", "correctness", "performance"],
+                        help="失败发生的具体阶段")
+    parser.add_argument("--phase-timings",
+                        help="每阶段 wall-clock JSON 文件路径（score.sh 生成）")
     parser.add_argument("--metric-type", default="tflops",
                         help="tflops | bandwidth_gbps | latency_us")
     parser.add_argument("--best-score", type=float, default=0.0,
@@ -100,6 +102,15 @@ def main():
 
     test_levels = [l.strip() for l in args.test_levels.split(",") if l.strip()]
 
+    # 读取阶段时间（如果提供）
+    phase_timings = {}
+    if args.phase_timings:
+        try:
+            with open(args.phase_timings) as f:
+                phase_timings = json.load(f)
+        except Exception:
+            phase_timings = {}
+
     score = {
         "version": f"v{args.version}",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -110,11 +121,12 @@ def main():
         "improvement_over_best": "N/A",
         "test_levels_run": test_levels,
         "configs": [],
+        "phase_timings": phase_timings,
     }
 
-    # Pre-correctness 阶段性失败（compile / deploy / pybind）
+    # Pre-correctness 阶段性失败（environment / compile / deploy / pybind）
     # 这些阶段没有 correctness / performance 结果可解析，直接写 error_log 返回
-    PRE_CORRECTNESS_STAGES = {"compile", "deploy", "pybind"}
+    PRE_CORRECTNESS_STAGES = {"environment", "compile", "deploy", "pybind"}
     is_pre_correctness_failure = (
         args.compile_error is not None
         or (args.failure_stage in PRE_CORRECTNESS_STAGES)
