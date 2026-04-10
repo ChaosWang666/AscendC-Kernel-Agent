@@ -150,10 +150,23 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 }
 ```
 
+**两种调用方式**（根据场景选择）：
+
 ```bash
+# 框架流水线调用（Tester 正式路径，解析退出码 + v{N}.json.failure_type）
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+bash "$PROJECT_ROOT/scoring/build_pybind.sh" "{WORKSPACE}/test/CppExtension" "$PROJECT_ROOT/workspace/deploy/opp"
+# 等价于 score.sh 的 Step 3（pybind stage），pybind 失败时 score.sh 退出码 = 4
+```
+
+```bash
+# 手动/调试调用（Developer 本地迭代，等价 python3 setup.py build bdist_wheel + pip install）
 cd "{WORKSPACE}/test/CppExtension"
 bash build_and_run.sh 2>&1
 ```
+
+> 框架评分流水线（`scoring/score.sh`）**总是**使用 `scoring/build_pybind.sh`。
+> `CppExtension/build_and_run.sh` 是给人类或调试场景的便利脚本，不参与自动评分。
 
 验证绑定成功：
 ```python

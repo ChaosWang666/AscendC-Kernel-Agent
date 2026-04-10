@@ -64,12 +64,13 @@
 ```
 workspace/runs/{op_name}/test/
 ├── CppExtension/                   — Python 绑定构建
-│   ├── setup.py                    — NpuExtension 配置
-│   ├── build_and_run.sh            — 构建安装脚本
+│   ├── setup.py                    — NpuExtension 配置（模块名 custom_ops_lib）
+│   ├── build_and_run.sh            — 手动调试脚本（框架流水线不用）
 │   └── csrc/
 │       ├── op.cpp                  — 算子绑定（EXEC_NPU_CMD）
 │       └── pytorch_npu_helper.hpp  — NPU 辅助工具
-└── reference.py                    — Model + ModelNew + get_inputs
+└── reference.py                    — Model + ModelNew + get_inputs + get_init_inputs
+                                      (见下方"reference.py 隐式契约"节)
 ```
 
 ---
@@ -191,9 +192,10 @@ cd build_out && ./custom_opp_*.run
 
 ### PyTorch 框架测试
 ```bash
-# 构建 Python 绑定
-cd workspace/runs/{op_name}/test/CppExtension
-bash build_and_run.sh
+# 构建 Python 绑定（框架流水线入口）
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+bash scoring/build_pybind.sh workspace/runs/{op_name}/test/CppExtension workspace/deploy/opp
+# （手动调试也可 cd 进 CppExtension 跑 bash build_and_run.sh，但框架流水线不走这条路）
 
 # 正确性测试
 python3 scoring/test_correctness.py \
@@ -210,10 +212,24 @@ python3 scoring/test_performance.py \
 
 ### 完整评分流程
 ```bash
-bash scoring/score.sh workspace/runs/{op_name}/attempts/step_0 scoring/configs/default.json
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+bash scoring/score.sh workspace/runs/{op_name}/attempts/step_0 scoring/configs/{op_name}.json
+# 退出码契约（scoring/score.sh 头部也有说明）：
+#   0=完整成功, 2=compile, 3=deploy, 4=pybind, 5=correctness
+# 无论成功失败都会写 evolution/scores/v{N}.json，failure_type 字段反映失败阶段
 ```
 
 ---
+
+## reference.py 隐式契约
+
+`test_correctness.py` / `test_performance.py` 对 `reference.py` 模块有几条不写在文档里但必须满足的约定：
+
+1. **`get_init_inputs()` 被无参调用**：架构参数（hidden_size、num_layers 等）必须在 reference.py 中固定，**不能**随 scoring config 变化。per-config 只能变 tensor 形状/dtype（如 batch_size / seq_len / shape / dtype），架构参数由 `get_init_inputs()` 硬编码。
+2. **`get_inputs(config)` 接受 dict 但 fallback 到无参调用**：`test_correctness.py` 先尝试 `get_inputs(config)`，若抛 TypeError 退化为 `get_inputs()`。建议 reference.py 显式 `def get_inputs(config=None)`。
+3. **`Model` 与 `ModelNew` 的 `nn.Module` 参数创建顺序必须完全一致**：`test_correctness.py` 连续两次 `torch.manual_seed(SEED)` + 构造两个类，靠顺序一致来保证 weight 初始化一致。有状态算子（如 LSTM）的 `ModelNew` 必须保留对应的 `self.xxx = nn.Layer(...)` 成员作为权重容器，即便 forward 不调用它。
+4. **`Model(*init_inputs).to(device)` 和 `ModelNew(*init_inputs).to(device)`**：init_inputs 的顺序和数量必须与两个类 `__init__` 的位置参数完全一致。
+5. **`model(*inputs)`**：inputs 列表解包为 forward 的位置参数；支持多输入，但所有 `nn.Module` 输出必须是**单个 tensor**（不能是 tuple），以便 `ref_output.shape / torch.allclose` 比较。
 
 ## 精度标准
 

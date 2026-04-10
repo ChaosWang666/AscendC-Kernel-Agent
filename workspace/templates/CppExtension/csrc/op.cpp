@@ -1,11 +1,15 @@
 // CppExtension Python 绑定模板
-// 此文件由 Tester Agent 根据算子定义自动更新
+// 此文件由 Developer Agent 根据算子定义自动更新
 //
 // 使用方法：
 // 1. 替换 {op_name}_custom 为实际算子名
 // 2. 替换 {OpName}Custom 为 PascalCase 算子名
 // 3. 根据算子的输入/输出调整函数签名
-// 4. 运行 build_and_run.sh 编译安装
+// 4. 框架流水线：由 scoring/build_pybind.sh 自动调用
+//    手动调试：在 CppExtension 目录下 bash build_and_run.sh
+//
+// 注意：Python 模块名固定为 `custom_ops_lib`（setup.py 中的 NpuExtension.name），
+// Python 端统一 import custom_ops_lib 后调用 custom_ops_lib.{op_name}_custom(...)
 
 #include <torch/library.h>
 #include <torch/csrc/autograd/custom_function.h>
