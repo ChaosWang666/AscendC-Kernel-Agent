@@ -85,7 +85,10 @@ def main():
     parser.add_argument("--version", required=True, help="版本号")
     parser.add_argument("--correctness-result", help="正确性结果 JSON")
     parser.add_argument("--performance-result", help="性能结果 JSON")
-    parser.add_argument("--compile-error", help="编译错误日志")
+    parser.add_argument("--compile-error", help="失败阶段的日志文件（与 --failure-stage 搭配使用）")
+    parser.add_argument("--failure-stage",
+                        choices=["compile", "deploy", "pybind", "correctness", "performance"],
+                        help="失败发生的具体阶段（compile/deploy/pybind/correctness/performance）")
     parser.add_argument("--metric-type", default="tflops",
                         help="tflops | bandwidth_gbps | latency_us")
     parser.add_argument("--best-score", type=float, default=0.0,
@@ -109,16 +112,21 @@ def main():
         "configs": [],
     }
 
-    # 编译失败
-    if args.compile_error:
+    # 阶段性失败（compile / deploy / pybind 等）
+    # failure_type 精确反映失败阶段，便于 Architect / Supervisor 做路径分流
+    if args.compile_error or args.failure_stage:
         try:
             with open(args.compile_error) as f:
                 error_log = f.read()[-2000:]  # 最后 2000 字符
         except Exception:
-            error_log = "无法读取编译日志"
+            error_log = "无法读取失败阶段日志"
 
-        score["compile_error"] = error_log
-        score["failure_type"] = "compile"
+        stage = args.failure_stage or "compile"  # 默认 compile 保持向后兼容
+        score["error_log"] = error_log
+        score["failure_type"] = stage
+        # 旧键 compile_error 保留为 alias 以便兼容既有消费者
+        if stage == "compile":
+            score["compile_error"] = error_log
         with open(args.output, "w") as f:
             json.dump(score, f, indent=2, ensure_ascii=False)
         return

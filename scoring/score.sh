@@ -13,6 +13,15 @@
 #   9. compute_score.py → 聚合为最终 JSON
 #
 # 用法: bash scoring/score.sh <op_path> <config_path>
+#
+# 退出码契约（供 Architect / Supervisor / CI 消费）:
+#   0 — 完整 pipeline 成功（v{N}.json 已聚合，correctness_total == 1.0）
+#   2 — compile 阶段失败     (failure_type=compile)
+#   3 — deploy 阶段失败      (failure_type=deploy)
+#   4 — pybind 阶段失败      (failure_type=pybind)
+#   5 — correctness 阶段失败 (failure_type=correctness)
+#   6 — performance 阶段失败 (failure_type=performance, 未实现：当前仅记录不退出)
+# 所有失败情况都会写 v{N}.json 供后续分析；Architect 可同时依赖退出码和 failure_type。
 
 set -euo pipefail
 
@@ -105,11 +114,12 @@ if ! bash "$SCRIPT_DIR/compile.sh" "$OP_PATH" > "$COMPILE_LOG" 2>&1; then
     cat "$COMPILE_LOG" | tail -20
     python3 "$SCRIPT_DIR/compute_score.py" \
         --version "$VERSION" \
+        --failure-stage compile \
         --compile-error "$COMPILE_LOG" \
         --metric-type "$METRIC_TYPE" \
         --output "$SCORE_JSON"
     echo "评分结果: $SCORE_JSON"
-    exit 0
+    exit 2  # compile stage failure
 fi
 echo "构建成功"
 
@@ -121,11 +131,12 @@ if ! bash "$SCRIPT_DIR/deploy.sh" "$OP_PATH" "$DEPLOY_DIR" > "$DEPLOY_LOG" 2>&1;
     cat "$DEPLOY_LOG" | tail -20
     python3 "$SCRIPT_DIR/compute_score.py" \
         --version "$VERSION" \
+        --failure-stage deploy \
         --compile-error "$DEPLOY_LOG" \
         --metric-type "$METRIC_TYPE" \
         --output "$SCORE_JSON"
     echo "评分结果: $SCORE_JSON"
-    exit 0
+    exit 3  # deploy stage failure
 fi
 
 # 设置部署后的环境变量
@@ -145,11 +156,12 @@ if [ -d "$CPP_EXT_DIR" ]; then
         cat "$PYBIND_LOG" | tail -20
         python3 "$SCRIPT_DIR/compute_score.py" \
             --version "$VERSION" \
+            --failure-stage pybind \
             --compile-error "$PYBIND_LOG" \
             --metric-type "$METRIC_TYPE" \
             --output "$SCORE_JSON"
         echo "评分结果: $SCORE_JSON"
-        exit 0
+        exit 4  # pybind stage failure
     fi
     echo "Python 绑定构建成功"
     USE_PYTORCH=true
@@ -188,12 +200,13 @@ if [ "$(python3 -c "print(1 if float('$SMOKE_PASS') < 1.0 else 0)")" = "1" ]; th
     echo "Smoke 正确性失败 ($SMOKE_PASS)，提前退出"
     python3 "$SCRIPT_DIR/compute_score.py" \
         --version "$VERSION" \
+        --failure-stage correctness \
         --correctness-result "$CORRECTNESS_SMOKE" \
         --metric-type "$METRIC_TYPE" \
         --test-levels "$LEVELS_RUN" \
         --output "$SCORE_JSON"
     echo "评分结果: $SCORE_JSON"
-    exit 0
+    exit 5  # correctness stage failure
 fi
 echo "Smoke 正确性通过"
 
@@ -231,12 +244,13 @@ with open('$CORRECTNESS_ALL', 'w') as f: json.dump(merged, f, indent=2)
 "
     python3 "$SCRIPT_DIR/compute_score.py" \
         --version "$VERSION" \
+        --failure-stage correctness \
         --correctness-result "$CORRECTNESS_ALL" \
         --metric-type "$METRIC_TYPE" \
         --test-levels "$LEVELS_RUN" \
         --output "$SCORE_JSON"
     echo "评分结果: $SCORE_JSON"
-    exit 0
+    exit 5  # correctness stage failure
 fi
 echo "Representative 正确性通过"
 
