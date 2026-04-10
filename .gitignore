@@ -30,6 +30,5 @@ dist/
 .idea/
 .DS_Store
 
-# Local test sessions
-test_report.md
+# Local test sessions — test.md is session-scoped, reports are kept
 test.md
