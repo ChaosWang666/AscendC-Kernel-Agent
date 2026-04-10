@@ -144,6 +144,7 @@ def compute_performance_total(results, metric_type):
 
 
 def main():
+    global NUM_WARMUP, NUM_TRIALS
     parser = argparse.ArgumentParser(description="NPU Event-based 性能测试")
     parser.add_argument("--reference", required=True, help="reference.py 路径")
     parser.add_argument("--config", required=True, help="测试配置 JSON")
@@ -154,9 +155,10 @@ def main():
                         help="算子部署目录（ASCEND_CUSTOM_OPP_PATH）")
     parser.add_argument("--warmup", type=int, default=NUM_WARMUP, help="预热轮数")
     parser.add_argument("--trials", type=int, default=NUM_TRIALS, help="测量轮数")
+    parser.add_argument("--levels", default="representative",
+                        help="测试级别（逗号分隔）")
     args = parser.parse_args()
 
-    global NUM_WARMUP, NUM_TRIALS
     NUM_WARMUP = args.warmup
     NUM_TRIALS = args.trials
 
@@ -190,7 +192,8 @@ def main():
         test_config = json.load(f)
 
     metric_type = args.metric_type
-    configs = extract_configs(test_config)
+    levels = [l.strip() for l in args.levels.split(",") if l.strip()]
+    configs = extract_configs(test_config, levels=levels or None)
 
     all_results = []
 
