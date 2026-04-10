@@ -57,10 +57,15 @@ def load_reference_module(reference_path):
     return module
 
 
+LEVEL_ORDER = ["seed", "smoke", "representative", "stress"]
+
+
 def extract_configs(test_config, levels):
-    """从测试配置中提取指定级别的配置列表"""
+    """从测试配置中提取指定级别的配置列表（按 LEVEL_ORDER 稳定排序）"""
     all_configs = []
-    for level in levels:
+    # Normalize: keep only known levels, preserve LEVEL_ORDER ordering
+    ordered_levels = [lv for lv in LEVEL_ORDER if lv in levels]
+    for level in ordered_levels:
         level_configs = test_config.get(level, [])
         for c in level_configs:
             c["_level"] = level
@@ -248,8 +253,8 @@ def main():
     parser.add_argument("--reference", required=True, help="reference.py 路径")
     parser.add_argument("--config", required=True, help="测试配置 JSON")
     parser.add_argument("--output", required=True, help="结果输出 JSON")
-    parser.add_argument("--levels", default="smoke,representative,stress",
-                        help="测试级别（逗号分隔）")
+    parser.add_argument("--levels", default="seed,smoke,representative,stress",
+                        help="测试级别（逗号分隔）；已知级别: seed < smoke < representative < stress")
     parser.add_argument("--deploy-dir", default=None,
                         help="算子部署目录（ASCEND_CUSTOM_OPP_PATH）")
     args = parser.parse_args()

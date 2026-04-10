@@ -3,6 +3,21 @@
   "description": "Elementwise Add 测试配置（分级）",
   "metric_type": "latency_us",
   "min_improvement_ratio": 0.02,
+  "_notes": [
+    "Level 设计（由快到慢）：",
+    "  seed: 极小尺寸（用于 Developer fast-path 自测，~秒级）",
+    "  smoke: 小尺寸（基本正确性验证）",
+    "  representative: 代表性尺寸（主要性能测量点）",
+    "  stress: 大尺寸（压力/边界测试，仅在满足门槛时运行）",
+    "可选字段：default_atol / default_rtol 全局覆盖精度；或 per-config atol/rtol"
+  ],
+  "seed": [
+    {
+      "name": "seed_minimal_fp32",
+      "shape": [64],
+      "dtype": "fp32"
+    }
+  ],
   "smoke": [
     {
       "name": "small_fp32",

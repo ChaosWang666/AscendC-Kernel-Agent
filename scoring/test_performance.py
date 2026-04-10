@@ -33,12 +33,20 @@ def load_reference_module(reference_path):
     return module
 
 
+LEVEL_ORDER = ["seed", "smoke", "representative", "stress"]
+
+
 def extract_configs(test_config, levels=None):
-    """从测试配置中提取配置列表"""
+    """从测试配置中提取配置列表（按 LEVEL_ORDER 稳定排序）
+
+    注意：seed 级别通常不做性能测量（尺寸太小，噪声大），
+    因此性能测试的默认 levels 不包含 seed。
+    """
     all_configs = []
     if levels is None:
         levels = ["smoke", "representative", "stress"]
-    for level in levels:
+    ordered_levels = [lv for lv in LEVEL_ORDER if lv in levels]
+    for level in ordered_levels:
         level_configs = test_config.get(level, [])
         for c in level_configs:
             c["_level"] = level

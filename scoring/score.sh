@@ -97,6 +97,7 @@ DEPLOY_LOG="$LOG_DIR/deploy.log"
 PYBIND_LOG="$LOG_DIR/pybind.log"
 CORRECTNESS_LOG="$LOG_DIR/correctness.log"
 PERFORMANCE_LOG="$LOG_DIR/performance.log"
+CORRECTNESS_SEED="$TMPDIR/correctness_seed.json"
 CORRECTNESS_SMOKE="$TMPDIR/correctness_smoke.json"
 CORRECTNESS_REP="$TMPDIR/correctness_rep.json"
 CORRECTNESS_STRESS="$TMPDIR/correctness_stress.json"
@@ -278,6 +279,47 @@ else
     phase_end "pybind"
     echo "未找到 CppExtension 目录，使用兼容模式"
     USE_PYTORCH=false
+fi
+
+# ============ Step 3.5: Seed 正确性（可选）============
+# Seed 是最小尺寸级别（通常 batch=1, seq=2-4），用于 Developer 快速迭代。
+# 如果 config 里有 seed 级别，先跑它——只要 seed 过，说明 kernel 逻辑基本
+# 成型，值得做更大尺寸的 smoke 测试。如果 seed 不过，提前退出省 10+ 秒。
+HAS_SEED_LEVEL=$(python3 -c "
+import json
+with open('$CONFIG_PATH') as f: cfg = json.load(f)
+print('yes' if cfg.get('seed') else 'no')
+" 2>/dev/null || echo "no")
+
+if [ "$HAS_SEED_LEVEL" = "yes" ] && [ "$USE_PYTORCH" = true ] && [ -f "$REFERENCE_PY" ]; then
+    echo ""
+    echo ">>> Step 3.5: Seed 正确性测试（fast path）"
+    phase_begin
+    bash "$SCRIPT_DIR/test_correctness.sh" \
+        "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_SEED" "seed" "$REFERENCE_PY" \
+        >> "$CORRECTNESS_LOG" 2>&1
+    SEED_PASS=$(python3 -c "
+import json
+with open('$CORRECTNESS_SEED') as f: r = json.load(f)
+print(r.get('correctness_total', 0.0))
+" 2>/dev/null || echo "0.0")
+    if [ "$(python3 -c "print(1 if float('$SEED_PASS') < 1.0 else 0)")" = "1" ]; then
+        phase_end "correctness_seed"
+        echo "Seed 正确性失败 ($SEED_PASS)，提前退出（跳过 smoke/representative/stress）"
+        dump_phase_timings
+        python3 "$SCRIPT_DIR/compute_score.py" \
+            --version "$VERSION" \
+            --failure-stage correctness \
+            --correctness-result "$CORRECTNESS_SEED" \
+            --phase-timings "$PHASE_TIMINGS_FILE" \
+            --metric-type "$METRIC_TYPE" \
+            --test-levels "seed" \
+            --output "$SCORE_JSON"
+        echo "评分结果: $SCORE_JSON"
+        exit 5  # correctness stage failure
+    fi
+    phase_end "correctness_seed"
+    echo "Seed 正确性通过（kernel 基本成型）"
 fi
 
 # ============ Step 4: Smoke 正确性 ============
