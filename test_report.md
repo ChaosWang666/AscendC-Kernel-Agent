@@ -21,6 +21,8 @@
 
 ## v0 尝试运行结果
 
+### 第一次运行（环境未修）
+
 | 阶段 | 结果 | 备注 |
 |------|------|------|
 | DESIGN / PLAN | ✅ | Architect 写 DESIGN.md + PLAN.md |
@@ -31,6 +33,42 @@
 | **Tester.build_pybind** | ❌ | **环境级**阻塞：`setuptools`/`pip` 目录 `750 root:root`，非框架 bug |
 | Tester.correctness/performance | - | 被 pybind 失败阻塞 |
 | Supervisor | ✅ | 判定 ABORT，写入 `evolution/redirects/step_1.md` 并给出外部修复步骤 |
+
+### 第二次运行（环境已修 + 框架 fix 验证）
+
+环境修复命令（由持有 sudo 权限的用户执行）：
+```bash
+sudo chmod -R o+rX /usr/local/lib/python3.11/site-packages/setuptools \
+                    /usr/local/lib/python3.11/site-packages/pip \
+                    /usr/local/lib/python3.11/site-packages/pkg_resources \
+                    /usr/local/lib/python3.11/site-packages/_distutils_hack
+```
+
+修复后重跑 `score.sh`：
+
+| 阶段 | 结果 | 备注 |
+|------|------|------|
+| Tester.compile | ✅ | 复用 Developer build |
+| Tester.deploy | ✅ | aclnn header 重装 |
+| **Tester.build_pybind** | ✅ | **环境修复后成功**，`custom_ops_lib` wheel 构建安装 |
+| **Tester.correctness.smoke** | ❌（预期） | 零占位 kernel vs 真实 `nn.LSTM`：`max_rel_error=11.49`，`correctness_total=0.0` |
+| Tester.correctness.representative | - | 按 score.sh 逻辑 smoke 失败后跳过 |
+| **score.sh 退出码** | **5** | 正确反映 correctness 阶段失败（F4 fix 生效） |
+| **v0.json.failure_type** | **`"correctness"`** | 精确标记阶段（F5 fix 生效） |
+| **v0.json.configs** | 含 `lstm_smoke_s_fp32` 的 max_abs_error / max_rel_error | Architect/Supervisor 可精细分析失败 |
+
+**这次运行实测验证了 6 个框架修复的正确性**：
+
+| 修复 | 验证方式 | 结果 |
+|------|---------|------|
+| F4（score.sh 退出码契约） | `$? == 5` | ✅ |
+| F5（failure_type 枚举） | `v0.json.failure_type == "correctness"` | ✅ |
+| F5 regression（correctness 阶段不 early-return） | `v0.json.configs` 含 per-config error 详情 | ✅ |
+| F7（setuptools preflight） | 环境修好后 `env_setup.sh` source 时无 warning | ✅ |
+| pybind 打通后的框架全链路 | compile → deploy → pybind → correctness 4 阶段都执行 | ✅ |
+| `nn.LSTM` 在 NPU 上可用 | `torch._VF.lstm` 被调用且返回有效结果 | ✅（外部观察） |
+
+**Developer 只需产出真正的 LSTM kernel 就能让正确性通过** —— 基线 `Model.forward` 在 Ascend NPU 上正常运行，`torch_npu` 原生支持 `nn.LSTM`。
 
 ## 发现的框架问题
 
@@ -82,15 +120,22 @@
 
 ## 运行环境恢复指引
 
-本次测试最大的外部阻塞是 setuptools/pip 权限问题。下次运行框架前必须由运维执行：
+本次测试最大的外部阻塞是 setuptools/pip 权限问题。**已在测试期间修复**：
 
 ```bash
-sudo chmod -R o+rX /usr/local/lib/python3.11/site-packages/{setuptools,pip,pkg_resources}
+sudo chmod -R o+rX /usr/local/lib/python3.11/site-packages/setuptools \
+                    /usr/local/lib/python3.11/site-packages/pip \
+                    /usr/local/lib/python3.11/site-packages/pkg_resources \
+                    /usr/local/lib/python3.11/site-packages/_distutils_hack
 # 验证
 python3 -c "from setuptools import setup; import pip; print('ok')"
 ```
 
-修复后 `scoring/env_setup.sh` 的 preflight 警告应消失。
+注：`_distutils_hack` 是独立 package，仅修 setuptools/pip 两个目录不够；setuptools 在
+`__init__.py` 会 `import _distutils_hack.override`，所以它也必须可读。F7 preflight
+只检测 setuptools，建议后续扩展到 `_distutils_hack`。
+
+修复后 `scoring/env_setup.sh` source 时静默无警告（表明 preflight 正确响应环境状态）。
 
 ## 测试结论
 
