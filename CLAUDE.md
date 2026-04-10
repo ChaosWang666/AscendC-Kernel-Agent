@@ -231,6 +231,64 @@ bash scoring/score.sh workspace/runs/{op_name}/attempts/step_0 scoring/configs/{
 4. **`Model(*init_inputs).to(device)` 和 `ModelNew(*init_inputs).to(device)`**：init_inputs 的顺序和数量必须与两个类 `__init__` 的位置参数完全一致。
 5. **`model(*inputs)`**：inputs 列表解包为 forward 的位置参数；支持多输入，但所有 `nn.Module` 输出必须是**单个 tensor**（不能是 tuple），以便 `ref_output.shape / torch.allclose` 比较。
 
+## AscendC 同步规则（反直觉）
+
+AVO 第二次 LSTM 验证运行（2026-04-10）发现的关键教训。所有 Agent 读到这里时请注意。
+
+### 核心结论
+
+**同一 Vector pipe 上有数据依赖的连续 op 必须显式 `PipeBarrier<PIPE_V>()`**。AscendC dispatcher **不会**自动对同 pipe 上写-后-读（RAW）模式做序列化。直觉上"同 pipe 顺序执行"是**错的**。
+
+典型陷阱：`Mul → ReduceSum`
+
+```cpp
+// ❌ 错误：Mul 刚写的 mulTmp 被 ReduceSum 立即读取，缺少 barrier → RAW race
+Mul(mulTmp, wRow, vec, count);
+ReduceSum(scalarBuf, mulTmp, work, count);   // 可能读到未完成的 mulTmp
+
+// ✅ 正确：显式 barrier 强制 Mul 完成后再 ReduceSum
+Mul(mulTmp, wRow, vec, count);
+PipeBarrier<PIPE_V>();
+ReduceSum(scalarBuf, mulTmp, work, count);
+```
+
+### 何时必须加 `PipeBarrier<PIPE_V>()`
+
+| 模式 | 必要性 | 说明 |
+|------|-------|------|
+| **RAW**（op2 读 op1 写的 tensor） | **必须** | Mul→ReduceSum、Add→Sigmoid 等 |
+| **WAR**（op2 写 op1 读的 tensor） | 建议 | 通常问题不大但保险 |
+| **独立 tensor**（op1、op2 操作完全不同的 LocalTensor） | 不需 | 只是性能开销 |
+| **已经过 V→S 事件同步**（`SetFlag<HardEvent::V_S>`） | 不需 | V→S 已 drain 所有前 vector ops |
+| **MTE2 → V** 且 CopyIn 通过 `EnQue/DeQue` 或内部事件同步 | 不需 | MTE2→V 事件已处理 |
+
+### 真实数据点（LSTM run #2）
+
+把 `AccumulateMatVec` 的 `Mul → ReduceSum` 之间的 PipeBarrier 移除后：
+
+| 指标 | 带 barrier（v0） | 不带 barrier（v1 aggressive） | 变化 |
+|------|----------------|------------------------------|------|
+| performance (smoke) | 47.29 ms | 45.58 ms | **−3.6%** 看似改进 |
+| correctness max_abs | 0.073 | 0.156 | **恶化 2×** |
+
+结论：**barrier 移除是引入了 race condition 的假优化**。trade correctness for speed 在 AVO 里永远是 reject（correctness_total 必须为 1.0 才能晋升 best）。
+
+### 调试提示
+
+如果 kernel 的输出**幅度大致正确但数值系统性偏移**（比如所有元素都错但不是零），**先怀疑 RAW 同步漏洞**。诊断步骤：
+
+1. 在可疑 op 之间临时加 `PipeBarrier<PIPE_V>()`
+2. 重新测 correctness
+3. 如果 max_abs_error 大幅下降 → 确认是 RAW 漏洞；保留 barrier
+4. 如果 max_abs_error 不变 → 是别的 bug（通常是算法或权重布局），继续查
+
+**不要**用 `PipeBarrier<PIPE_ALL>()` 调试后不改回 —— PIPE_ALL 是全流水线停顿，把性能打回解放前。
+
+### 参考资料
+
+- skill `ascendc-api-best-practices` 的 `references/api-pipeline.md`（同步机制详解）
+- skill `ascendc-msopgen-workflow`（本仓库新增，覆盖 msopgen 生成 + 编译 + 部署全链路坑点）
+
 ## 精度标准
 
 | dtype | rtol | atol |
