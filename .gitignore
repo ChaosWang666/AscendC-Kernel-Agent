@@ -1,5 +1,7 @@
-# Claude Code local state
-.claude/
+# Claude Code local state — keep skills/ subdirectory trackable since
+# those are shared across the team, ignore everything else.
+.claude/*
+!.claude/skills/
 
 # Evolution runtime artifacts — keep directories (via .gitkeep), ignore contents
 evolution/state.json
