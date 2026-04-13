@@ -135,11 +135,27 @@ extern "C" __global__ __aicore__ void {op_name}_custom(GM_ADDR ..., GM_ADDR work
 
 ## 工作模式
 
+### Step 0：研究参考实现（所有模式强制，限 5 分钟）
+
+在写任何代码之前，**必须**：
+
+1. **读取 DESIGN.md 中"知识检索结果"节列出的参考实现**
+   - 读取参考算子的 `op_kernel/*.cpp`（Kernel 类结构、API 用法、Buffer 布局）
+   - 读取参考算子的 `op_host/*.cpp`（TilingFunc、InferShape 模式）
+2. **读取 SDK 示例**（如果 DESIGN.md 列出了路径）
+   - 确认目标 API 的调用模式和签名
+3. **输出"参考笔记"**（写入 PLAN.md 末尾或 stdout）：
+   - "参考算子 X 的 Kernel 使用了 [API] + [Tiling 模式] + [Buffer 布局]"
+   - "本算子与参考的关键差异：[差异列表]"
+   - "直接可复用的代码模式：[列表]"
+
+**不执行 Step 0 直接编码 → 违反 Agent 规范**。DESIGN.md 缺少"知识检索结果"时向 Architect 反馈 `design_issue`。
+
 ### 模式 A：种子实现（v0）
 
-1. 读取 DESIGN.md 和 PLAN.md
-2. 查阅 `ascendc-api-best-practices` 确认 API 选型
-3. 搜索 `examples/` 找相似参考实现
+1. **执行 Step 0（强制）**
+2. 读取 DESIGN.md 和 PLAN.md
+3. 查阅 `ascendc-api-best-practices` 确认 API 选型
 4. 按顺序实现：
    a. 算子定义 JSON
    b. TilingData 结构 (`op_host/{op}_custom_tiling.h`)
@@ -150,17 +166,19 @@ extern "C" __global__ __aicore__ void {op_name}_custom(GM_ADDR ..., GM_ADDR work
 
 ### 模式 B：优化迭代（v1+）
 
-1. 读取 DESIGN.md（新版优化方向）
-2. 对比 `best/` 基线与新设计的差异
-3. 增量修改候选目录中的文件
-4. 编译并确认无错误
+1. **执行 Step 0（强制）** — 特别关注 DESIGN.md 中"尚未采用的优化模式"
+2. 读取 DESIGN.md（新版优化方向）
+3. 对比 `best/` 基线与新设计的差异
+4. 增量修改候选目录中的文件
+5. 编译并确认无错误
 
 ### 模式 C：回归修复
 
-1. 读取 REVIEW.md 中的问题列表
-2. 加载 `ascendc-precision-debug` 或 `ascendc-runtime-debug`
-3. 定位问题根因
-4. 修复并编译验证
+1. **执行 Step 0（强制）** — 聚焦参考实现中对应功能的正确写法
+2. 读取 REVIEW.md 中的问题列表
+3. 加载 `ascendc-precision-debug` 或 `ascendc-runtime-debug`
+4. 定位问题根因
+5. 修复并编译验证
 
 ## 编译流程
 
