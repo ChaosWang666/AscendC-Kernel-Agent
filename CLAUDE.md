@@ -117,6 +117,23 @@ workspace/runs/{op_name}/test/
 | Catlass 张量库 | `programming-coding-sources/catlass/` | 类 CUTLASS 的张量运算 |
 | 通信算子 | `comm-coding-sources/hcomm/` | CCU 内核、集合通信 |
 
+### 参考实现导航（算子分类 → Knowledge-base 路径）
+
+Architect 在种子阶段的 **Step 2.5 KNOWLEDGE RETRIEVAL** 中**必须**按算子分类定位参考实现：
+
+| 算子分类 | Knowledge-base 路径（前缀 `ops-coding-sources/`） | 典型算子 |
+|---------|--------------------------------------------------|---------|
+| 激活类 | `ops-nn/activation/{op}/` | gelu, relu, silu, swish, sigmoid |
+| RNN/LSTM/GRU | `ops-nn/rnn/` | dynamic_rnn, thnn_fused_lstm_cell |
+| 归一化 | `ops-nn/normalization/` | layer_norm, batch_norm, group_norm |
+| MatMul/GEMM | `ops-nn/matmul/` | matmul, batch_matmul |
+| 量化 | `ops-nn/quantization/` | quant, dequant |
+| Attention | `ops-transformer/attention/` | flash_attention（48 变体） |
+| 数学/逐元素 | `ops-math/` | add, mul, div, pow, exp |
+| CV | `ops-cv/` | resize, crop, nms, roi_align |
+
+导航步骤：`ls` 目标目录 → 确认参考算子存在 → 读取 `op_kernel/` + `op_host/` → 记录到 DESIGN.md "知识检索结果" 节
+
 ---
 
 ## Ascend C 快速参考
