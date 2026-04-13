@@ -94,12 +94,35 @@ ls evolution/redirects/       # 若目录不存在先 mkdir -p
   "failed_attempts":     0,
   "consecutive_redirects": 0,
   "total_attempts":      0,
-  "lineage": []
+  "lineage": [],
+  "start_timestamp": null,
+  "failure_history": []
 }
 ```
 
-`current_version = -1` 是 seed 阶段的信号（见本文档 "种子生成 (v0)" 节）。
+- `current_version = -1` 是 seed 阶段的信号（见 "种子生成 (v0)" 节）
+- `start_timestamp`：首次循环时设为当前 Unix 时间戳（秒），后续**不再修改**，用于墙钟超时检查
+- `failure_history`：每次失败时 Step 8 追加一条记录（见 Step 8），Supervisor 用于失败模式去重
+
 写入后 **不** commit——state.json 只在 Step 8 更新后才 commit。
+
+#### 墙钟超时检查（每轮执行）
+
+```python
+import time
+state = json.load(open('evolution/state.json'))
+if state.get('start_timestamp') is None:
+    state['start_timestamp'] = time.time()
+    # 写回 state.json（仅首次）
+else:
+    elapsed_h = (time.time() - state['start_timestamp']) / 3600
+    max_h = parse_hours(config['max_wall_time'])  # "168h" → 168
+    if elapsed_h >= max_h:
+        write_terminate_redirect(f"墙钟超时: {elapsed_h:.1f}h >= {max_h}h")
+        exit_loop()
+```
+
+超时时自动写入 `evolution/redirects/` 并退出。这是 7 天连续运行不陷入无限循环的最后一道保障。
 
 ### Step 2: ANALYZE
 
@@ -135,7 +158,8 @@ ls evolution/redirects/       # 若目录不存在先 mkdir -p
 | `stall_counter >= stall_threshold` | 性能停滞 | dispatch Supervisor（category=stall） |
 | `failed_attempts >= max_failed_attempts` | 连续失败 | dispatch Supervisor（category=failure） |
 | `consecutive_redirects >= max_consecutive_redirects` | 重定向无效 | 退出主循环（无需再 Supervisor） |
-| 其他 | 正常 | 进入 Step 3 DESIGN |
+| `failure_history` 中同一 `root_cause_signature` 出现 ≥ 2 次 | 重复失败 | 跳过该方向 + 尝试全新 DESIGN；若无新方向 → dispatch Supervisor |
+| 其他 | 正常 | 进入 Step 2.5 KNOWLEDGE RETRIEVAL |
 
 ```python
 # 伪代码
@@ -175,6 +199,49 @@ $(ls -t evolution/scores/ | head -5 | xargs -I{} cat evolution/scores/{})
 > 注：嵌套的 `claude --print` 在一个已运行的 Claude Code 会话内部通常无法继承工具权限与上下文，首选 `Agent` 工具。
 
 Supervisor 将指令写入 `evolution/redirects/step_{N}.md`，下一轮 ANALYZE 读取。
+
+### Step 2.5: KNOWLEDGE RETRIEVAL（知识检索 — 强制）
+
+**不检索不设计** —— DESIGN.md 如果没有"知识检索结果"节，Reviewer 应标记 FAIL。
+
+#### 种子阶段（current_version < 0）
+
+1. **按算子分类定位参考实现**（见 CLAUDE.md "参考实现导航" 表）：
+   - 确定算子类型（激活 / 归一化 / MatMul / Attention / 数学 / CV）
+   - `ls Knowledge-base/coding-sources/ops-coding-sources/<对应路径>/` 确认参考算子存在
+   - **至少读取 1 个最相似算子**的完整 `op_kernel/*.cpp` + `op_host/*.cpp`
+   
+2. **查阅 SDK 示例**：
+   - `ls Knowledge-base/coding-sources/programming-coding-sources/asc-devkit/examples/` 按目录名匹配
+   - 找到匹配示例后读取核心代码（通常 < 100 行）
+
+3. **查阅 API 文档**：
+   - 在 `programming-coding-sources/asc-devkit/docs/api/context/` 确认核心 API 存在性和签名
+   - 使用 `ascendc-docs-search` skill 辅助（非替代直接读取）
+
+4. **知识摘要写入 DESIGN.md**：
+   ```markdown
+   ## 知识检索结果
+   
+   ### 参考实现
+   - 算子: {name}, 路径: Knowledge-base/coding-sources/...
+   - 设计模式: {Tiling 策略} + {Buffer 布局} + {Pipeline 同步}
+   - 核心 API: {API 名称 + 签名}
+   
+   ### SDK 示例
+   - 路径: .../examples/.../{name}.asc
+   - 模式: {CopyIn → Compute → CopyOut / 其他}
+   
+   ### 与目标算子的差异
+   - {差异 1}
+   - {差异 2}
+   ```
+
+#### 优化阶段（current_version >= 0）
+
+1. **搜索同类算子的优化 pattern**：在参考实现中找 Double Buffer / 多级 Tiling / Cube+Vector 混合等**当前 best 尚未采用**的模式
+2. **查阅 profiling 对应的优化文档**（VEC ratio 高 → Cube 利用；MTE2 ratio 高 → 数据复用）
+3. **知识摘要写入 DESIGN.md**
 
 ### Step 3: DESIGN
 
@@ -295,9 +362,19 @@ cat evolution/scores/v{N}.json | python3 -m json.tool
 - Git commit
 
 **拒绝/失败**：
-- 更新计数器
+- 更新计数器（stall_counter++ 或 failed_attempts++）
 - 清理候选目录
 - 日志记录到 `evolution/logs/step_{NNN}.md`
+- **写入 failure_history**（失败时必须）：
+  ```json
+  {
+    "version": N,
+    "failure_type": "<from v{N}.json.failure_type>",
+    "root_cause_signature": "<v{N}.json.error 或 mismatch_details 的摘要，50 字以内>",
+    "timestamp": "<ISO 8601>"
+  }
+  ```
+  Supervisor 使用此记录做失败模式去重（同一 root_cause_signature 出现 ≥ 2 次 → 该方向被禁止）
 
 ## 种子生成（v0）
 
