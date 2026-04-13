@@ -58,12 +58,21 @@ print(cfg.get('operator', 'unknown'))
 " 2>/dev/null || echo "unknown")
 
 # 读取当前版本号和最佳评分
+# VERSION 是"本次评分要写到 v{N}.json 的 N"。语义：
+#   - state.json.current_version = -1 (seed 阶段) → 写 v0.json
+#   - state.json.current_version = N (已有 N+1 个 accepted 版本) → 写 v{N+1}.json
+# 支持两个字段名：canonical 'current_version' (见 Architect AGENT.md bootstrap
+# schema) 和 legacy 'current_step'（向后兼容）。
 VERSION=$(python3 -c "
 import json, os
 state_path = os.path.join('$PROJECT_ROOT', 'evolution', 'state.json')
 if os.path.exists(state_path):
     with open(state_path) as f: s = json.load(f)
-    print(s.get('current_step', 0))
+    cv = s.get('current_version', s.get('current_step', -1))
+    if cv is None or cv < 0:
+        print(0)  # seed phase writes v0.json
+    else:
+        print(cv + 1)  # next attempt writes v{current_version+1}.json
 else:
     print(0)
 " 2>/dev/null || echo "0")
