@@ -87,6 +87,7 @@ cd {CANDIDATE_DIR}/{OpName}Custom
 - 计算逻辑与数学定义一致
 - 边界条件处理（尾块、非对齐、空输入）
 - 多核分发正确（GetBlockIdx / GetBlockNum）
+- **知识库利用**：DESIGN.md 是否包含"知识检索结果"节（seed 阶段**必须**有；缺失则本维度上限 15 分）；核心 API 选型是否与知识库中最佳实践一致
 
 #### 3.3 API 规范性（15 分）
 
@@ -130,6 +131,7 @@ cd {CANDIDATE_DIR}/{OpName}Custom
 - op_host 注册：`OP_ADD({OpName}Custom)`
 - 文件组织符合工程模板
 - 无硬编码魔数
+- **DESIGN.md 完整性**：是否包含"知识检索结果"节（seed 阶段必须；优化阶段推荐但不强制扣分）
 
 ### Step 4: 输出 REVIEW.md
 
