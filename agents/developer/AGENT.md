@@ -166,7 +166,7 @@ extern "C" __global__ __aicore__ void {op_name}_custom(GM_ADDR ..., GM_ADDR work
 
 ### 模式 B：优化迭代（v1+）
 
-1. **执行 Step 0（强制）** — 特别关注 DESIGN.md 中"尚未采用的优化模式"
+1. **执行 Step 0（强制，可短路）** — 如果 DESIGN.md 的"知识检索结果"与上一轮完全相同（无新参考），可跳过文件读取，直接复用上轮参考笔记；否则关注"尚未采用的优化模式"
 2. 读取 DESIGN.md（新版优化方向）
 3. 对比 `best/` 基线与新设计的差异
 4. 增量修改候选目录中的文件

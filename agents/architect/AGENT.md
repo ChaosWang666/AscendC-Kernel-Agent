@@ -102,7 +102,7 @@ ls evolution/redirects/       # 若目录不存在先 mkdir -p
 
 - `current_version = -1` 是 seed 阶段的信号（见 "种子生成 (v0)" 节）
 - `start_timestamp`：首次循环时设为当前 Unix 时间戳（秒），后续**不再修改**，用于墙钟超时检查
-- `failure_history`：每次失败时 Step 8 追加一条记录（见 Step 8），Supervisor 用于失败模式去重
+- `failure_history`：每次失败时 Step 8 追加一条记录（见 Step 8），Supervisor 用于失败模式去重。**上限 20 条**——超过时丢弃最老的条目（滚动窗口），避免长期运行时 state.json 膨胀。`failure_type` 使用 Supervisor AGENT.md Step 2.5 定义的枚举（environment / compile / correctness_precision / correctness_crash / performance_regression）
 
 写入后 **不** commit——state.json 只在 Step 8 更新后才 commit。
 
@@ -149,16 +149,16 @@ else:
 - `verdict: ABORT`    → **立即退出主循环**，不再 dispatch 任何子 agent（见 Supervisor AGENT.md 的 verdict 定义）
 - `verdict: TERMINATE_SUCCESS` → 任务已达成，退出主循环
 
-#### Supervisor 激活决策（决策表）
+#### Supervisor 激活决策（决策表 — 优先于上方的策略表执行）
 
-每轮 ANALYZE 执行此表；命中一条即派发 Supervisor：
+每轮 ANALYZE **先执行此决策表**（从上到下，命中即执行），**再**根据上方策略表选择 DESIGN 方向。决策表决定"是否继续本轮循环"，策略表决定"如何设计"。
 
 | 条件 | 判定 | 动作 |
 |------|------|------|
 | `stall_counter >= stall_threshold` | 性能停滞 | dispatch Supervisor（category=stall） |
 | `failed_attempts >= max_failed_attempts` | 连续失败 | dispatch Supervisor（category=failure） |
 | `consecutive_redirects >= max_consecutive_redirects` | 重定向无效 | 退出主循环（无需再 Supervisor） |
-| `failure_history` 中同一 `root_cause_signature` 出现 ≥ 2 次 | 重复失败 | 跳过该方向 + 尝试全新 DESIGN；若无新方向 → dispatch Supervisor |
+| `failure_history` 中同一 `root_cause_signature` ≥ 2 次 | 重复失败 | 跳过该方向（见 Supervisor AGENT.md Step 2.5 去重规则）；若无新方向 → dispatch Supervisor |
 | 其他 | 正常 | 进入 Step 2.5 KNOWLEDGE RETRIEVAL |
 
 ```python
@@ -239,9 +239,10 @@ Supervisor 将指令写入 `evolution/redirects/step_{N}.md`，下一轮 ANALYZE
 
 #### 优化阶段（current_version >= 0）
 
-1. **搜索同类算子的优化 pattern**：在参考实现中找 Double Buffer / 多级 Tiling / Cube+Vector 混合等**当前 best 尚未采用**的模式
-2. **查阅 profiling 对应的优化文档**（VEC ratio 高 → Cube 利用；MTE2 ratio 高 → 数据复用）
-3. **知识摘要写入 DESIGN.md**
+1. **复用种子阶段的知识摘要**：如果上一轮 DESIGN.md 的"知识检索结果"仍然适用（同一算子、同一参考实现），**直接复制到本轮 DESIGN.md**，不重新读取 Knowledge-base（避免 100 版本 × 88K 文件的重复 IO）
+2. **搜索同类算子的优化 pattern**：仅在需要**新优化方向**时才重新检索参考实现，找 Double Buffer / 多级 Tiling / Cube+Vector 混合等**当前 best 尚未采用**的模式
+3. **查阅 profiling 对应的优化文档**（VEC ratio 高 → Cube 利用；MTE2 ratio 高 → 数据复用）
+4. **知识摘要写入 DESIGN.md**
 
 ### Step 3: DESIGN
 
