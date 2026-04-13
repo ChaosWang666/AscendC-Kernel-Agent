@@ -19,6 +19,12 @@ ABS_OP_PATH="$(cd "$OP_PATH" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEPLOY_DIR="${2:-$PROJECT_ROOT/workspace/deploy/opp}"
 
+# The .run installer requires an ABSOLUTE path for --install-path (relative
+# paths get rejected at install time). Normalize early so all later uses
+# (mkdir, env exports, logging) see the canonical absolute form.
+mkdir -p "$DEPLOY_DIR"
+DEPLOY_DIR="$(cd "$DEPLOY_DIR" && pwd)"
+
 echo "========================================"
 echo "部署自定义算子包"
 echo "  算子路径: $ABS_OP_PATH"
@@ -45,9 +51,7 @@ fi
 
 echo "找到部署包: $RUN_FILE"
 
-# 创建部署目录
-mkdir -p "$DEPLOY_DIR"
-
+# DEPLOY_DIR 已在脚本开头 normalize 为绝对路径（.run installer 要求）
 # 执行部署
 echo "开始部署..."
 chmod +x "$RUN_FILE"
