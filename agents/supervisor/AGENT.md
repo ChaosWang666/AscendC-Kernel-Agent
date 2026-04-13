@@ -69,6 +69,28 @@ ls evolution/scores/
 - **瓶颈分布**：最近 profiling 数据中反复出现的瓶颈
 - **失败模式**：连续失败的共同原因
 
+### Step 2.5: 失败模式去重（防死循环的核心机制）
+
+读取 `state.json.failure_history`（由 Architect Step 8 写入），提取所有 `root_cause_signature`。
+
+**失败分类枚举**：
+
+| failure_type | 含义 | Supervisor 响应 |
+|-------------|------|----------------|
+| `environment` | 环境问题（权限、依赖缺失） | 直接 **ABORT**，不计入 failed_attempts |
+| `compile` | 编译错误 | 可修复，计入 failed_attempts |
+| `correctness_precision` | 精度不达标（max_abs > atol） | 记录具体 threshold gap |
+| `correctness_crash` | NPU 运行时崩溃（UB overflow 等） | 记录 crash signature |
+| `performance_regression` | 性能退步或不达门槛 | stall_counter++ |
+
+**去重规则**：
+
+如果 `failure_history` 中同一 `root_cause_signature` 出现 ≥ 2 次：
+→ 该方向**已被证明不可行**，REDIRECT 中**明确禁止**再次尝试
+→ 列入 redirect 文件的 `forbidden_directions` 字段
+
+示例：v2 和 v3 都因 "UB overflow at tileLen=12288" 失败 → Supervisor 的 REDIRECT 写入 "forbidden: tileLen > 10240 的 UB 配置"
+
 ### Step 3: 生成重定向指令（按 verdict 分类）
 
 Supervisor 的输出必须选择一个明确的 **verdict**，不同 verdict 对应不同的 Architect 响应：
@@ -92,11 +114,19 @@ Supervisor 的输出必须选择一个明确的 **verdict**，不同 verdict 对
 ## 进化轨迹分析
 {已尝试方向总结、瓶颈分布、失败模式}
 
-## 建议探索方向
+## 建议探索方向（必须引用知识库）
 {1-2 个尚未充分探索的方向}
 
+每个建议**必须**附带知识库证据：
+1. 搜索 Knowledge-base 中与当前算子同类的参考实现
+2. 找到"参考实现已采用但当前 kernel 尚未采用"的优化模式
+3. 格式示例：
+   "建议方向：采用 [参考算子 X] 的 [优化模式 Y]
+    参考路径：Knowledge-base/coding-sources/ops-coding-sources/.../op_kernel/...
+    该方向是否在 failure_history 中出现过：否"
+
 ## 不要再尝试的方向
-{已失败方向列表}
+{已失败方向列表 + failure_history 中重复出现的 root_cause_signature}
 
 ---
 supervisor_trailer:
