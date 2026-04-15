@@ -325,3 +325,15 @@ Supervisor Agent（仅在停滞时介入）:
 ```
 
 评分函数：`scoring/score.sh workspace/runs/{op_name}/attempts/step_{N} scoring/configs/{op_name}.json` → `evolution/scores/v{N}.json`
+
+---
+
+## EVO 框架（并行研究分支）
+
+本仓同时维护 `EVO` 分支（从 `main` 派生），复现 EvoKernel 论文（`EVO-paper/main.tex`）的 **跨算子、价值驱动** 框架：
+
+- 入口：`evo/README.md`
+- 核心差异于 AVO：跨算子共享 Memory Bank + 阶段专属 Q 值 + 两阶段流水线（Drafting → Refining）+ 多门验证器
+- 复用 AVO `scoring/` + `agents/developer/AGENT.md`，自建 `evo/agents/` 6 个角色 + `evo/memory/` + `evo/state/`
+
+切到 EVO 分支工作：`git checkout EVO`；详情见 `evo/README.md`。

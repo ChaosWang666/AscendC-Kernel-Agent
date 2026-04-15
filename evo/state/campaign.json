@@ -1,0 +1,10 @@
+{
+  "status": "uninitialized",
+  "operator_queue": [],
+  "completed_ops": [],
+  "current_op": null,
+  "current_stage": null,
+  "started_at": null,
+  "finished_at": null,
+  "_comment": "campaign-orchestrator 首次运行时会从 evo/config.yaml::operator_queue 初始化本文件；operator_queue 字段会被展开成完整对象数组，status 变为 'running'。"
+}

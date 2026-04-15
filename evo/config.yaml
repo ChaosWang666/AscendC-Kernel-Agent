@@ -1,0 +1,103 @@
+# EVO 框架配置（EvoKernel 论文复现）
+# 超参符号遵循论文 §3；默认值取自论文 §4.1 或合理推断
+
+# ========== 运行模式 ==========
+mode: multi_op_stream              # 论文原设定（跨算子 campaign）
+backend: ascend_c                  # 可扩展 cuda（§4.5 Beyond KernelBench）
+
+# ========== Operator Queue（Campaign 驱动） ==========
+# Campaign-orchestrator 按顺序消费；先 L1 后 L2 模拟论文 L1→L2 transfer
+operator_queue:
+  - op_name: gelu_custom
+    level: L1
+    spec: workspace/specs/gelu_custom.md
+    op_capital_name: GeluCustom
+    runs_dir: workspace/runs/gelu_custom
+    scoring_config: scoring/configs/gelu_custom.json
+  # 追加新算子格式同上；L2 在 L1 全部跑完后入列
+
+per_op_budget: 30                  # T=30 步/算子（论文 §4.1）
+stage1_max_budget: 15              # Drafting 独立上限（若 15 步内仍不可行则降级）
+
+# ========== Stage 切换策略 ==========
+stage_transition:
+  stage1_exit: first_feasible      # g_feas(o_t)=1 即切 Stage 2
+  stage2_loop: until_budget        # Stage 2 耗尽 per_op_budget 剩余预算
+
+# ========== 检索超参（§3.2） ==========
+retrieval:
+  N: 10                            # 最终 context item 数
+  lambda: 5                        # 过检倍率 → K=λN=50
+  epsilon_start: 0.3               # ε-greedy 起始探索率（Drafting 早期）
+  epsilon_end: 0.05                # 衰减下界
+  epsilon_decay_steps: 20          # 线性衰减步数
+  dense_match:
+    method: tag_overlap            # v1 简化：tag 交集；v2 可升级 embedding
+    min_overlap: 1                 # 至少 1 个 tag 匹配才入 top-K
+
+# ========== Q 更新（Eq. 3） ==========
+q_update:
+  alpha: 0.1                       # 步长
+  q_init: 0.0                      # 新 item 初始 Q
+  q_clip: [-1.0, 1.0]              # 有界保证（论文 App A.2）
+
+# ========== Stage 2 奖励（Eq. 5） ==========
+reward_stage2:
+  popart_enabled: true             # 在线归一化
+  popart_momentum: 0.99            # μ_2, σ_2 EMA 衰减系数
+  popart_epsilon: 1e-8             # σ 下限防除零
+  infeasible_penalty: -1.0         # g_feas=0 时直接给 -1（见 Eq. 5）
+
+# ========== Verifier（§3.5） ==========
+verifier:
+  score_sh_path: scoring/score.sh                          # 复用 AVO
+  anti_hack_rules_path: evo/docs/multi-gate-verification.md
+  tolerance_atol: 1e-2             # 论文 §4.1
+  tolerance_rtol: 1e-2
+  # score.sh 退出码 → 门映射
+  exit_code_map:
+    "0": {g_comp: 1, g_corr: 1, latency_source: "evolution/scores/v{N}.json"}
+    "1": {g_comp: 0, g_corr: 0, reason: "environment"}
+    "2": {g_comp: 0, g_corr: 0, reason: "compile"}
+    "3": {g_comp: 1, g_corr: 0, reason: "deploy"}
+    "4": {g_comp: 1, g_corr: 0, reason: "pybind"}
+    "5": {g_comp: 1, g_corr: 0, reason: "correctness"}
+    "6": {g_comp: 1, g_corr: 1, reason: "performance_only", latency_source: "evolution/scores/v{N}.json"}
+
+# ========== LLM Generator ==========
+generator:
+  dispatch: claude_code_agent      # 通过 Agent() 派发 agents/developer/AGENT.md
+  developer_agent: agents/developer/AGENT.md
+  max_session_duration: 15m        # 单次 Developer 派发超时
+  # 注入到 Developer prompt 的字段
+  context_injection:
+    stage: "{stage}"               # "drafting" or "refining"
+    retrieved_items: "{context}"   # N 个 memory item markdown 拼接
+    start_point: "{start_point}"   # Stage 2 专属；Stage 1 留空
+
+# ========== 持久化路径 ==========
+paths:
+  memory_bank: evo/memory/
+  state: evo/state/
+  seed_knowledge: evo/memory/seed/
+  start_points: evo/memory/start_points/
+  campaign_state: evo/state/campaign.json
+  episode_root: evo/state/episodes/
+
+# ========== 日志 / 诊断 ==========
+logging:
+  trajectory_enabled: true         # 每步 (s, a, r, o) 写 episodes/{op}/trajectory.jsonl
+  q_snapshot_every: 5              # 每 5 步备份 q_values.json
+  popart_log_every: 10
+
+# ========== Anti-Hacking（§B.1 + §B.2） ==========
+anti_hack:
+  rule_based:
+    forbidden_imports: [torch, torch_npu, numpy]    # kernel 文件禁用
+    forbidden_api_substrings: ["torch.nn.functional", "F.gelu", "F.relu", "torch_npu.npu"]
+    # 允许 op_host / reference 使用 torch（仅 op_kernel 受限）
+    scope_files: ["op_kernel/*.cpp", "op_kernel/*.h"]
+  model_based:
+    enabled: true                  # LLM auditor（派发 Reviewer-like 独立审查）
+    auditor_agent: agents/reviewer/AGENT.md
+    prompt_mode: anti_hack_audit
