@@ -2,53 +2,153 @@
 
 ## 团队概览
 
-自主 Ascend C 算子生成与进化系统，由 5 个 Agent 协作完成从需求理解到性能优化的全流程。
+自主 Ascend C 算子生成与进化系统，由 6 个 Agent 协作完成从需求理解到报告生成的全流程。
 
 核心公式：`Vary(P_t) = Agent(P_t, K, f)`
 
 ## 角色定义
 
-| Agent | 角色 | 职责 |
-|-------|------|------|
-| **Architect** | 主 Agent | 任务理解、架构设计、任务分发、流程编排 |
-| **Developer** | 代码编写 | op_host / op_kernel / tiling 实现，编译调试 |
-| **Reviewer** | 代码审查 | 独立构建验证、7 维质量评分、精度验证 |
-| **Tester** | 测试验证 | 自定义算子工程构建、部署、PyTorch 框架测试 |
-| **Supervisor** | 进化监督 | 不干预主 Agent 执行，仅在停滞时介入重定向 |
+| Agent | 角色 | 职责 | 派发时机 |
+|-------|------|------|---------|
+| **Architect** | 主 Agent | 任务理解、架构设计、任务分发、流程编排 | 每轮主循环 |
+| **Developer** | 代码编写 | op_host / op_kernel / tiling 实现，编译调试 | Architect Step 4 |
+| **Reviewer** | 代码审查 | 独立静态审查、DESIGN.md 合规校验、7 维质量评分 | Architect Step 5 **（与 Tester 并行）**|
+| **Tester** | 测试验证 | 自定义算子工程构建、部署、PyTorch 框架测试、性能采集 | Architect Step 6 **（与 Reviewer 并行）**|
+| **Supervisor** | 进化监督 | 主动监测趋势 + 停滞/失败/方向重复干预 | 主动触发 + Architect Step 2 被动 |
+| **Reporter** | 报告生成 | 综合所有进化痕迹生成最终 `report.md` | 收敛判定时触发（见下文）|
 
-## 团队工作流
+## 团队工作流（并行化）
 
 ```
 用户提交算子需求
     │
     ▼
-┌─────────────────────────────────────────────────────┐
-│  Architect Agent（主 Agent，全流程编排）              │
-│                                                       │
-│  1. ANALYZE  — 解析算子需求，确定计算模式              │
-│  2. DESIGN   — 架构设计（Tiling / Buffer / Pipeline） │
-│  3. DISPATCH — 分发任务给 Developer 和 Tester          │
-│  4. ITERATE  — 根据反馈迭代优化                        │
-│                                                       │
-│  ┌─────────┐    ┌──────────┐    ┌─────────┐          │
-│  │Developer│◄──►│ Reviewer │    │ Tester  │          │
-│  │         │    │          │    │         │          │
-│  │op_host/ │    │7维评分    │    │构建部署  │          │
-│  │op_kernel│    │精度验证   │    │PyTorch  │          │
-│  │tiling   │    │独立验证   │    │正确性   │          │
-│  └─────────┘    └──────────┘    │性能采集  │          │
-│                                  └─────────┘          │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Architect Agent（主 Agent，全流程编排）                       │
+│                                                                │
+│  Step 1: READ STATE                                            │
+│  Step 2: ANALYZE（+ 消费 Supervisor 信号）                     │
+│  Step 2.5: KNOWLEDGE RETRIEVAL（强制查 L3 docs + L2 sources）  │
+│  Step 3: DESIGN（DESIGN.md + PLAN.md）                         │
+│  Step 4: DISPATCH Developer（串行：必须先出代码）               │
+│                                                                │
+│  Step 5+6: 并行派发 Reviewer + Tester                          │
+│  ┌─────────┐    ┌──────────────┐    ┌───────────────┐         │
+│  │Developer│───►│   Reviewer    │    │    Tester     │         │
+│  │         │    │ (静态检视+    │    │ (跑 score.sh) │         │
+│  │op_host/ │    │  docs 合规+   │    │ 编译/部署/     │         │
+│  │op_kernel│    │  独立编译)    │    │ PyTorch 测试)  │         │
+│  └─────────┘    └──────┬───────┘    └───────┬───────┘         │
+│                        │      合流           │                  │
+│                        ▼  ─────────────────► ▼                 │
+│  Step 7: EVALUATE（综合 REVIEW.md + v{N}.json）                │
+│  Step 8: UPDATE STATE → 若收敛触发 Reporter                    │
+└──────────────────────────────────────────────────────────────┘
     │
-    │  进化循环（多版本迭代）
     ▼
-┌─────────────────────────────────────────────────────┐
-│  Supervisor Agent（仅在停滞时介入）                    │
-│                                                       │
-│  监控 state.json → 检测停滞 → 生成重定向指令           │
-│  不控制 Architect 的决策，不参与日常执行                │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Supervisor Agent（主动监测 + 停滞介入）                       │
+│  每 3 轮自检趋势；stall/failure/direction_repeat 即 WARN/ALERT/BLOCK │
+└──────────────────────────────────────────────────────────────┘
+    │
+    ▼ （收敛时）
+┌──────────────────────────────────────────────────────────────┐
+│  Reporter Agent（LLM 综合生成报告）                            │
+│  读 state.json + scores + logs + DESIGN.md → 输出 report.md    │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Agent 调用协议 ⭐️
+
+### 派发方式
+
+**首选**：Claude Code `Agent()` 工具（in-session subagent，最稳定，支持 tool 继承）
+
+```python
+Agent(
+    description="<role>: <op_name> v{N}",
+    subagent_type="general-purpose",
+    prompt="<详见下方 Prompt 模板>"
+)
+```
+
+**兜底**：CLI `claude --print`（独立进程；不共享工具权限，不推荐嵌套使用）
+
+### Prompt 模板（所有派发必须包含）
+
+```
+你是 <Role> Agent，读取 agents/<role>/AGENT.md 作为角色定义。
+
+【输入】
+- 设计文档: {CANDIDATE_DIR}/docs/DESIGN.md
+- 实现计划: {CANDIDATE_DIR}/docs/PLAN.md
+- 算子工程: {CANDIDATE_DIR}/{OpName}Custom/
+- 测试配置: scoring/configs/{op_name}.json
+- 参考实现: workspace/runs/{op_name}/test/reference.py
+
+【输出】
+- <具体文件路径> + YAML trailer（status: success|fail, summary: ...）
+
+【约束】
+- 预算: max_session_duration=10m
+- 环境: 所有 bash 调用必须先 `source /usr/local/Ascend/ascend-toolkit/set_env.sh`
+- 禁止: <角色特定禁止动作>
+```
+
+### 并行派发规则
+
+**独立任务 → 单消息多 Agent 调用**（一次消息内发多个 `Agent()` 工具块）
+
+```python
+# ✅ 正确：一次消息发两个 Agent 调用（Reviewer + Tester 并行）
+[
+    Agent(description="Reviewer: ...", prompt="..."),
+    Agent(description="Tester: ...",   prompt="...")
+]
+```
+
+**依赖任务 → 顺序调用**（前者完成后再启动）
+
+```python
+# ✅ 正确：Dev 必须先完成，才能派发 Rev/Test
+result_dev = Agent(description="Developer: ...", prompt="...")
+# 等 Dev 返回后
+[Agent(...Reviewer...), Agent(...Tester...)]  # 此时再并行
+```
+
+**依赖判定规则**：
+- 若 agent B 读取 agent A 的输出文件 → 必须顺序
+- 若 agent B 与 agent A 只读共享输入 → 可并行
+
+### 返回契约（所有子 agent 必须遵守）
+
+子 agent 产出文件**底部**写入 YAML trailer：
+
+```yaml
+---
+role: reviewer | tester | developer | reporter | supervisor
+status: success | partial | fail
+summary: 一句话说明
+artifacts:
+  - path: {CANDIDATE_DIR}/docs/REVIEW.md
+  - path: evolution/scores/v{N}.json
+next_action: continue | fail_fast | escalate
+details:
+  # 角色特定字段
+---
+```
+
+Architect 读取 trailer 判断是否合流成功，据此决定下一步。
+
+### 并行多变体开发（高级）
+
+当 Architect 对参数选择不确定时（如 RESERVE=4/8/12KB），可**同时派发 N 个 Developer**，每个尝试不同变体。完成后对比 A/B 挑最优。
+
+参考 `superpowers:dispatching-parallel-agents` skill。
+
+---
 
 ## 自定义算子工程结构
 
@@ -72,14 +172,18 @@
     └── op_api/lib/libcust_opapi.so
 ```
 
-## 测试流程（参考 MultiKernelBench）
+## 测试流程
 
 ```
-1. 构建算子工程    → msopgen gen + build.sh → custom_opp_*.run
-2. 部署算子包      → ./custom_opp_*.run → OPP 目录
+1. 构建算子工程     → msopgen gen + build.sh → custom_opp_*.run
+2. 部署算子包       → ./custom_opp_*.run → OPP 目录
 3. 构建 Python 绑定 → CppExtension setup.py → custom_ops_lib wheel
-4. 正确性测试      → PyTorch: Model vs ModelNew + torch.allclose
-5. 性能测试        → NPU Event timing: warmup + 多轮测量
+4. Seed 正确性     → PyTorch 最小尺寸自测（秒级）
+5. Boundary 正确性 → 边界/多秩/极值（诊断性，非阻塞）
+6. Smoke 正确性    → 小尺寸验证
+7. Representative  → 正确性 + 主性能测量
+8. Stress（可选）  → 大尺寸目标规模（仅通过提交门槛时）
+9. 聚合评分        → evolution/scores/v{N}.json（含 boundary_summary + test_coverage）
 ```
 
 ## 工作区模型
@@ -92,54 +196,73 @@ workspace/runs/{op_name}/
 │   └── {OpName}Custom/
 ├── test/                           — 测试基础设施
 │   ├── CppExtension/              — Python 绑定构建
-│   │   ├── setup.py
-│   │   ├── build_and_run.sh
-│   │   └── csrc/
-│   │       ├── op.cpp
-│   │       └── pytorch_npu_helper.hpp
-│   └── reference.py               — PyTorch 参考实现
+│   └── reference.py               — PyTorch 参考实现（支持 input_mode 极值注入）
 
 workspace/deploy/opp/               — 算子部署目录（全局共享）
 ```
 
 ## 进化主循环
 
-Architect Agent 驱动主循环，Supervisor 仅在停滞时介入：
-
 ```
 EVOLUTION LOOP:
-  1. Architect: 分析当前状态和 profiling 数据
-  2. Architect: 设计优化方向，生成 DESIGN.md + PLAN.md
-  3. Developer: 实现代码修改（op_host + op_kernel）
-  4. Reviewer:  代码审查（通过/修复循环，最多 3 轮）
-  5. Tester:    构建 → 部署 → 正确性测试 → 性能测试
-  6. Architect: 评估结果，决定接受/拒绝/迭代
-  7. 更新 state.json，若接受则晋升为 best/
-  8. GOTO 1
+  Step 1: READ STATE
+  Step 2: ANALYZE
+    - 消费 Supervisor redirect（若有）
+    - 墙钟超时检查
+  Step 2.5: KNOWLEDGE RETRIEVAL（强制）
+    - L3 docs 查询（必需，ascendc-kb-docs skill）
+    - L2 sources 查询
+  Step 3: DESIGN → 输出 DESIGN.md + PLAN.md
+  Step 4: DISPATCH Developer （串行）
+  Step 5+6: DISPATCH Reviewer + Tester （并行）
+  Step 7: EVALUATE
+  Step 8: UPDATE STATE
+    - 接受 → 晋升 best/，检测是否收敛 → 触发 Reporter
+    - 拒绝 → stall_counter++
+  Step 9: GOTO 1
 
-SUPERVISOR INTERVENTION（仅在以下情况触发）:
-  - stall_counter >= threshold（性能停滞）
-  - failed_attempts >= threshold（连续失败）
-  → 生成重定向指令，注入 Architect 的下一轮 ANALYZE
+SUPERVISOR MONITORING（主动，每 3 轮自检一次）:
+  - stall_counter >= 3       → WARN（提示 paired A/B 重测）
+  - failed_attempts >= 5     → ALERT + REDIRECT
+  - direction_repeated >= 2  → BLOCK（禁止该方向）
+  - variance_high            → ALERT（建议增加 trials）
+  - knowledge_gap            → BLOCK（驳回补 L3 docs）
+  - 3 轮无提升 mean           → hint redirect
+
+REPORTER TRIGGER（收敛时）:
+  - consecutive_redirects >= max
+  - stall_counter >= threshold AND Supervisor TERMINATE_SUCCESS
+  - total_attempts >= max_versions
+  → 派发 Reporter 读所有进化痕迹 → 生成 report.md
 ```
 
 ## 评分函数
 
 `scoring/score.sh workspace/runs/{op_name}/attempts/step_{N} scoring/configs/{op_name}.json`
 
-分级评分流程：
-1. 构建自定义算子工程（compile + deploy + pybind）
-2. Smoke 正确性测试 → 失败提前退出
-3. Representative 正确性测试 → 失败提前退出
-4. Representative 性能测试 → 检查提交门槛
-5. Stress 测试（若满足门槛）
-6. 聚合评分 → `evolution/scores/v{N}.json`
+退出码契约：
+- `0` 完整成功（correctness_total == 1.0）
+- `1` environment 预检失败
+- `2` compile 失败
+- `3` deploy 失败
+- `4` pybind 失败
+- `5` correctness 失败
+- `6` performance 失败（仅记录）
 
 ## 启动方式
 
 直接用 Claude Code 加载本文件（`agents/AGENTS.md`），Architect Agent 读取后自主执行进化循环。
 
 ```bash
-# 启动进化
 claude --print -p "读取 agents/AGENTS.md 和 evolution/config.yaml，开始执行进化循环"
 ```
+
+---
+
+## 关键约束
+
+- **Agent 调用必须遵守 YAML trailer 协议**
+- **Reviewer 和 Tester 必须并行派发**（不是顺序）
+- **Architect Step 2.5 KNOWLEDGE RETRIEVAL 是强制门槛**（无 L3 docs 引用则 Reviewer 判 FAIL）
+- **Supervisor 主动监测 stall_threshold=3**（不是被动等 5）
+- **收敛时必须派发 Reporter**（不写代码，用 LLM 综合）

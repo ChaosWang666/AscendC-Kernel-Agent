@@ -18,6 +18,13 @@
       "dtype": "fp32"
     }
   ],
+  "boundary": [
+    {"name": "bnd_size_1_fp32",      "shape": [1],             "dtype": "fp32"},
+    {"name": "bnd_odd_fp32",         "shape": [33],            "dtype": "fp32"},
+    {"name": "bnd_2d_fp32",          "shape": [32, 32],        "dtype": "fp32"},
+    {"name": "bnd_3d_fp32",          "shape": [4, 16, 32],     "dtype": "fp32"},
+    {"name": "bnd_extreme_fp32",     "shape": [1024],          "dtype": "fp32", "input_mode": "extreme"}
+  ],
   "smoke": [
     {
       "name": "small_fp32",

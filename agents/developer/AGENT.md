@@ -8,6 +8,7 @@ skills:
   - ascendc-precision-debug
   - ascendc-runtime-debug
   - ascendc-docs-search
+  - ascendc-kb-docs
   - ascendc-direct-invoke-template
   - ops-profiling
 permission:

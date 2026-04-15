@@ -57,7 +57,7 @@ def load_reference_module(reference_path):
     return module
 
 
-LEVEL_ORDER = ["seed", "smoke", "representative", "stress"]
+LEVEL_ORDER = ["seed", "boundary", "smoke", "representative", "stress"]
 
 
 def extract_configs(test_config, levels):
@@ -200,11 +200,38 @@ def test_single_config(ref_module, config, device, synchronize, test_config=None
                     )
                     break
 
-                # 数值检查
-                if not torch.allclose(ref_output, new_output, atol=atol, rtol=rtol):
+                # 数值检查：对 boundary tier 的 extreme 模式，NaN/Inf 位置需特殊处理
+                input_mode = config.get("input_mode", "normal") if config else "normal"
+                if input_mode == "extreme":
+                    # 将双方的 NaN 位置统一视为"相等"（避免 nan != nan 问题）
+                    ref_nan = torch.isnan(ref_output)
+                    new_nan = torch.isnan(new_output)
+                    nan_match = torch.all(ref_nan == new_nan).item()
+                    # 比较非 NaN 部分
+                    finite_mask = torch.isfinite(ref_output) & torch.isfinite(new_output)
+                    if finite_mask.any():
+                        close = torch.allclose(
+                            ref_output[finite_mask],
+                            new_output[finite_mask],
+                            atol=atol, rtol=rtol
+                        )
+                    else:
+                        close = True
+                    allclose_result = close and nan_match
+                else:
+                    allclose_result = torch.allclose(
+                        ref_output, new_output, atol=atol, rtol=rtol
+                    )
+
+                if not allclose_result:
                     diff = (ref_output - new_output).abs()
-                    max_abs = diff.max().item()
-                    nonzero = ref_output.abs() > 0
+                    # 过滤 NaN/Inf 以得到稳定 max
+                    finite_mask = torch.isfinite(diff)
+                    if finite_mask.any():
+                        max_abs = diff[finite_mask].max().item()
+                    else:
+                        max_abs = float('inf')
+                    nonzero = (ref_output.abs() > 0) & finite_mask
                     if nonzero.any():
                         max_rel = (diff[nonzero] / ref_output.abs()[nonzero]).max().item()
                     else:
@@ -310,7 +337,9 @@ def main():
         cfg_entry = {
             "name": config_name,
             "level": level,
+            "shape": config.get("shape"),
             "dtype": dtype,
+            "input_mode": config.get("input_mode", "normal"),
             "correctness": correctness,
             "atol": result.get("atol"),
             "rtol": result.get("rtol"),

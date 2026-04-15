@@ -20,7 +20,7 @@ reference_py: workspace/runs/gelu_custom/test/reference.py
 max_wall_time: 168h         # 最大运行时间（7 天）
 max_versions: 100           # 最大提交版本数
 max_session_duration: 15m   # 单次 Agent 会话最大时长
-stall_threshold: 5          # 连续"正确但无提升"触发重定向
+stall_threshold: 3          # 连续"正确但无提升"触发重定向（从 5 降到 3，基于 GELU 进化经验）
 max_failed_attempts: 5      # 连续失败触发 repair 模式
 max_consecutive_redirects: 3  # 连续重定向失败则停止
 
