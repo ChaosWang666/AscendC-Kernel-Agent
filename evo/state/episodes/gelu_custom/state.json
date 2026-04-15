@@ -1,0 +1,13 @@
+{
+  "op_name": "gelu_custom",
+  "stage": "refining",
+  "iter": 1,
+  "feasible_found": true,
+  "b_t": 38.07,
+  "budget_remaining": 29,
+  "last_failure_reason": null,
+  "stage1_steps_used": 1,
+  "P_x_size": 1,
+  "initial_feasible_at_step": 0,
+  "updated_at": "2026-04-15T09:05:31.301496Z"
+}

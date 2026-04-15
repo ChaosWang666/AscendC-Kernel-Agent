@@ -1,10 +1,15 @@
 {
-  "status": "uninitialized",
-  "operator_queue": [],
+  "status": "running",
+  "operator_queue": [
+    {
+      "op_name": "gelu_custom",
+      "level": "L1"
+    }
+  ],
   "completed_ops": [],
-  "current_op": null,
-  "current_stage": null,
-  "started_at": null,
+  "current_op": "gelu_custom",
+  "current_stage": "refining",
+  "started_at": "2026-04-15T09:05:31.301496Z",
   "finished_at": null,
-  "_comment": "campaign-orchestrator 首次运行时会从 evo/config.yaml::operator_queue 初始化本文件；operator_queue 字段会被展开成完整对象数组，status 变为 'running'。"
+  "_comment": "campaign-orchestrator 的状态；本次 smoke 手动触发第一个 episode"
 }

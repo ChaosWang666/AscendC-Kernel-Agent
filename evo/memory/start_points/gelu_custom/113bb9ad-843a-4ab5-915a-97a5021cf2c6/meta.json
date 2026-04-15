@@ -1,0 +1,10 @@
+{
+  "id": "113bb9ad-843a-4ab5-915a-97a5021cf2c6",
+  "operator": "gelu_custom",
+  "latency_us": 38.07,
+  "discovered_at_step": 0,
+  "discovered_at_stage": 1,
+  "source_attempt_dir": "workspace/runs/gelu_custom/attempts/step_evo_smoke",
+  "bank_entry_id": "113bb9ad-843a-4ab5-915a-97a5021cf2c6",
+  "created_at": "2026-04-15T09:05:31.301496Z"
+}

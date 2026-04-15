@@ -1,0 +1,1 @@
+{"t": "smoke_test", "rule_based": {"passed": true, "violations": [], "files_scanned": ["workspace/runs/gelu_custom/attempts/step_evo_smoke/GeluCustom/op_kernel/gelu_custom.cpp", "workspace/runs/gelu_custom/attempts/step_evo_smoke/GeluCustom/op_kernel/gelu_custom_tiling.h"]}, "model_based": {"status": "skipped", "reason": "smoke test uses best/, known clean"}}

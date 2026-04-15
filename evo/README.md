@@ -85,9 +85,9 @@ claude
 | §3 EvoKernel 框架总览 | `evo/spec.md` + 本文件 |
 | §3.1 Problem Formulation（M-MDP）| `evo/docs/m-mdp-formulation.md` |
 | §3.2 Memory + Value-Driven Retrieval | `evo/docs/memory-schema.md` + `retrieval-algorithm.md` |
-| §3.3 Stage 1 Cold-Start Drafting | `evo/docs/stage1-drafting.md` + `agents/stage1-drafter/AGENT.md` |
-| §3.4 Stage 2 Continual Refining | `evo/docs/stage2-refining.md` + `agents/stage2-refiner/AGENT.md` |
-| §3.5 Multi-gate Verification | `evo/docs/multi-gate-verification.md` + `agents/multigate-verifier/AGENT.md` |
+| §3.3 Stage 1 Cold-Start Drafting | `evo/docs/stage1-drafting.md` + `evo/agents/stage1-drafter/AGENT.md` |
+| §3.4 Stage 2 Continual Refining | `evo/docs/stage2-refining.md` + `evo/agents/stage2-refiner/AGENT.md` |
+| §3.5 Multi-gate Verification | `evo/docs/multi-gate-verification.md` + `evo/agents/multigate-verifier/AGENT.md` |
 | Eq. 3（MC Q 更新）| `evo/docs/q-value-update.md` |
 | App B Anti-Hacking | `evo/docs/multi-gate-verification.md` 后半 |
 | App A Proofs（boundedness + convergence）| `evo/docs/q-value-update.md` 后半 |
