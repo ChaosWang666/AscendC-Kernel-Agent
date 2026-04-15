@@ -89,16 +89,13 @@ def update_stage1(step, state, action, observation, reward, context_ids):
     }
     append_jsonl("evo/memory/bank.jsonl", new_item)
 
-    # 2. 若 feasible：加入 P(x)
+    # 2. 若 feasible：加入 P(x) — 仅存源代码（不存 cmake/ scripts/ makeself/ build_out/）
     if action.feasible:
-        variant_dir = f"evo/memory/start_points/{state.op_name}/{new_item.id}"
-        cp -r action.kernel_path → variant_dir
-        write(variant_dir + "/meta.json", {
-            "id": new_item.id,
-            "latency_us": observation.latency_us,
-            "discovered_at_step": step,
-            "stage": 1
-        })
+        save_start_point_partial(new_item.id, state.op_name, action.kernel_path,
+                                  observation.latency_us, step, stage=1)
+        # save_start_point_partial 复制白名单：
+        #   op_host/*.{cpp,h}, op_kernel/*.{cpp,h}, {op_name}.json, meta.json
+        # cmake/ scripts/ framework/ makeself/ 按需从 source_attempt_dir 重建或共享 skeleton
 
     # 3. MC 更新 Q_1（Eq. 3）
     q = load("evo/memory/q_values.json")
@@ -122,7 +119,10 @@ def update_stage2(step, state, action, observation, reward_raw, start_point_id, 
     # 1. PopArt 归一化
     stats = load("evo/memory/stats.json")
     s2 = stats.setdefault("stage2", {"mu": 0.0, "sigma": 1.0, "n": 0,
-                                      "momentum": config.reward_stage2.popart_momentum})
+                                      "momentum": config.reward_stage2.popart_momentum,
+                                      "initialized_at": None})
+    if s2["initialized_at"] is None:
+        s2["initialized_at"] = datetime.utcnow().isoformat() + "Z"
     # EMA 更新 μ, σ（无偏估计 flavor）
     m = s2.momentum
     n_new = s2.n + 1
@@ -141,10 +141,11 @@ def update_stage2(step, state, action, observation, reward_raw, start_point_id, 
                                 parent_trace_id=start_point_id)
     append_jsonl("evo/memory/bank.jsonl", new_item)
 
-    # 3. 若 feasible：扩展 P(x)
+    # 3. 若 feasible：扩展 P(x) — partial snapshot（见 Mode 1 注释）
     if action.feasible:
-        save_start_point(new_item.id, state.op_name, action.kernel_path,
-                         observation.latency_us, step, stage=2)
+        save_start_point_partial(new_item.id, state.op_name, action.kernel_path,
+                                  observation.latency_us, step, stage=2,
+                                  parent_trace_id=start_point_id)
 
     # 4. MC 更新 Q_2（对 start_point 和所有 context items）
     q = load("evo/memory/q_values.json")
@@ -171,6 +172,34 @@ def update_stage2(step, state, action, observation, reward_raw, start_point_id, 
 - `seed/best_practices.md` 里每段（以 `## ` 分节）→ type="best_practice" 的 entry
 
 Seed 条目的 Q_1 = Q_2 = `config.q_update.q_init`（默认 0）。
+
+### Mode 4: `archive_bank`（可选 GC；v2 / 未实现）
+
+当 `bank.jsonl` 行数 > 阈值（默认 10k）时：
+- 把 visit_1+visit_2 = 0 且 created_at < (now - 30d) 的条目移到 `evo/memory/bank.archive.jsonl`
+- 重写 `bank.jsonl` 为活跃集（保留所有 seed + 最近 5000 条）
+- 对应 q_values 条目同步归档
+
+v1 不执行；预留 mode 占位以便 campaign-orchestrator 在达到阈值时调用。
+
+### Helper: `save_start_point_partial`
+
+**目的**：避免每个 feasible kernel snapshot 复制完整 msopgen 工程（cmake/util/ makeself/ scripts/ 约 8k LOC boilerplate）。
+
+**白名单**（仅这些文件/目录会被拷入 `evo/memory/start_points/{op}/{id}/GeluCustom/`）：
+- `op_host/*.cpp`、`op_host/*.h`
+- `op_kernel/*.cpp`、`op_kernel/*.h`
+- `{op_name}_custom.json`（算子定义 JSON）
+
+**不拷贝**：
+- `cmake/`、`scripts/`、`framework/`、`build.sh`、`CMakeLists.txt`、`CMakePresets.json`（全部共享的 msopgen 骨架）
+- `build_out/`（构建产物；含 Ascend 构建系统的 broken symlink）
+
+**重建方法**：Stage 2 需要完整工程时，从最新 attempt 或一个共享 skeleton 拷 msopgen 骨架，再叠加 `start_points/{id}/` 的算子源。
+
+**meta.json**：保留 `source_attempt_dir` 字段作为兜底（若原 attempt 未 GC，可从那边拿完整工程）。
+
+**权衡**：从 ~64 files/8k LOC 减到 ~5 files/~200 LOC per snapshot。100 算子 × 5 variants 的 campaign 节省约 4 GB。
 
 ## 原子性与锁
 

@@ -7,5 +7,5 @@
     "updated_at_step": -1,
     "initialized_at": null
   },
-  "_comment": "PopArt 运行统计。memory-curator 首次 Stage 2 更新时会设置 initialized_at。sigma=1.0 作为初始值意味着首步 r_norm = r_raw - 0 = r_raw（无归一化效应），随着 n 增长 σ 才开始体现真实分布。"
+  "_comment": "PopArt online stats (Stage 2); schema & semantics: evo/docs/memory-schema.md §stats.json"
 }

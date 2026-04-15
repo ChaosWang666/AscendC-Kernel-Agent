@@ -1,5 +1,9 @@
 # EVO 框架配置（EvoKernel 论文复现）
 # 超参符号遵循论文 §3；默认值取自论文 §4.1 或合理推断
+#
+# 与 AVO evolution/config.yaml 的关系：operator_queue / per_op_budget /
+# scoring_config 等字段与 AVO 同构（便于复用 scoring/score.sh），EVO 在此基础上
+# 新增 retrieval / q_update / reward_stage2 / anti_hack 等 M-MDP 专属字段。
 
 # ========== 运行模式 ==========
 mode: multi_op_stream              # 论文原设定（跨算子 campaign）
@@ -95,9 +99,17 @@ anti_hack:
   rule_based:
     forbidden_imports: [torch, torch_npu, numpy]    # kernel 文件禁用
     forbidden_api_substrings: ["torch.nn.functional", "F.gelu", "F.relu", "torch_npu.npu"]
-    # 允许 op_host / reference 使用 torch（仅 op_kernel 受限）
+    # ⚠️ 仅扫 op_kernel（device 侧）；op_host/ 与 reference.py 合法使用 torch。
+    # 若关闭 model_based，考虑扩到 op_host/*.cpp 防 tiling 层 cheat。
     scope_files: ["op_kernel/*.cpp", "op_kernel/*.h"]
   model_based:
     enabled: true                  # LLM auditor（派发 Reviewer-like 独立审查）
     auditor_agent: agents/reviewer/AGENT.md
     prompt_mode: anti_hack_audit
+    # 何时触发 model-based（默认 first_feasible 以控成本；每次 ~30s）
+    # first_feasible: 仅对每算子第一个 g_feas=1 的 kernel 审计（高成本 / 高价值）
+    # epsilon_only:   retrieval 走 epsilon 分支时审计（新颖 context 风险高）
+    # every_n:        每 N 步采样一次（N 由 sampling_period 决定）
+    # always:         每步都审（论文原方案，成本高）
+    audit_policy: first_feasible
+    sampling_period: 5             # audit_policy=every_n 时生效

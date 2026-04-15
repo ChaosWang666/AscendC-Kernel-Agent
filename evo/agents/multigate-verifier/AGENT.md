@@ -112,7 +112,15 @@ def rule_based_check(attempt_dir, op_capital_name):
 
 ### Model-based（LLM auditor）
 
-若 rule-based 通过且 `config.anti_hack.model_based.enabled=true`：
+**何时触发**（受 `config.anti_hack.model_based.audit_policy` 控制，避免每步一次的高成本）：
+- `first_feasible`（默认）：仅对每算子首个 `g_feas=1` 的 kernel 审计
+- `epsilon_only`：retrieval-policy 选中的是 ε-greedy 分支（有新颖 context）时触发
+- `every_n`：每 `sampling_period` 步抽样一次
+- `always`：每步都审（论文原方案；100 步 campaign 多花 ~50 min）
+
+multigate-verifier 从 state / context 读 `selected_by` 字段或 `step % sampling_period` 判定是否跳过 model-based。
+
+若 rule-based 通过且 audit_policy 触发条件满足：
 
 ```python
 派发 Agent(

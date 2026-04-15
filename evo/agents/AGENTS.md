@@ -61,23 +61,18 @@ Agent(
 )
 ```
 
-## YAML Trailer 协议（继承 AVO）
+## YAML Trailer 协议
 
-所有 EVO 子 agent 产出文件底部写：
+继承 AVO：见 `agents/AGENTS.md` §"返回契约"——schema、语义、Architect 合流规则原样沿用。
 
-```yaml
----
-role: campaign-orchestrator | stage1-drafter | stage2-refiner | retrieval-policy | memory-curator | multigate-verifier
-status: success | partial | fail
-summary: 一句话说明
-artifacts:
-  - path: evo/state/episodes/{op}/trajectory.jsonl
-  - path: evo/memory/q_values.json
-next_action: continue | fail_fast | escalate
-details:
-  # 角色特定字段（见各 AGENT.md）
----
+EVO 只扩展 `role` 的取值域：
+
 ```
+role: campaign-orchestrator | stage1-drafter | stage2-refiner
+    | retrieval-policy | memory-curator | multigate-verifier
+```
+
+每个 AGENT.md 文末给出该角色的 `details.*` 字段清单。
 
 ## 并行派发规则（同 AVO）
 

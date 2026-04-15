@@ -54,7 +54,6 @@ evo/
 │   ├── campaign.json               全局状态（队列、当前 op、当前 stage）
 │   └── episodes/{op}/              per-op：state.json + trajectory.jsonl + scores/
 └── docs/                           算法详细说明
-    ├── m-mdp-formulation.md
     ├── memory-schema.md
     ├── retrieval-algorithm.md
     ├── stage1-drafting.md
@@ -83,7 +82,7 @@ claude
 | 论文 | 本仓位置 |
 |------|---------|
 | §3 EvoKernel 框架总览 | `evo/spec.md` + 本文件 |
-| §3.1 Problem Formulation（M-MDP）| `evo/docs/m-mdp-formulation.md` |
+| §3.1 Problem Formulation（M-MDP）| `evo/spec.md` §1 |
 | §3.2 Memory + Value-Driven Retrieval | `evo/docs/memory-schema.md` + `retrieval-algorithm.md` |
 | §3.3 Stage 1 Cold-Start Drafting | `evo/docs/stage1-drafting.md` + `evo/agents/stage1-drafter/AGENT.md` |
 | §3.4 Stage 2 Continual Refining | `evo/docs/stage2-refining.md` + `evo/agents/stage2-refiner/AGENT.md` |

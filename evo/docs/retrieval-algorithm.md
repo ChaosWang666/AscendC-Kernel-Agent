@@ -94,13 +94,27 @@ def retrieval_policy(state, stage, N, K, epsilon, subtask="retrieve_context",
         # dedupe + 附在 context 头
         chosen = [(a, "api_bundle") for a in api_items] + chosen
 
-    return {"context_items": [{"id": m.id, "type": m.type, "content": m.content,
+    # ==== Phase D: api_template content lazy fetch ====
+    # api_template seed 条目的 content 是指针 / 占位符（bootstrap 只写 target_path）；
+    # 实际注入 Developer prompt 前按需从 target_path 读对应 section 并回填。
+    def resolve_content(m):
+        if m.type == "api_template" and m.content.startswith("# "):
+            # Seed 条目：content 只有标题占位；读 target_path 取 section
+            tp = m.meta.get("target_path")
+            if tp and os.path.isfile(tp):
+                return read_markdown_section(tp, m.meta.name, max_chars=4000)
+        return m.content
+
+    return {"context_items": [{"id": m.id, "type": m.type,
+                                "content": resolve_content(m),
                                 "meta": m.meta, "Q_k": Q.get(m.id, 0.0),
                                 "selected_by": tag} for m, tag in chosen],
             "pool_size": len(pool),
             "N_selected": len(chosen),
             "epsilon_used": epsilon}
 ```
+
+**Lazy fetch 不入 bank**：每次检索按需读 target_path；若改为预填 content 会让 bank.jsonl 从几 KB 膨胀到几 MB，且知识库更新时无法自动同步。
 
 ## Dense 匹配（v1：tag overlap）
 

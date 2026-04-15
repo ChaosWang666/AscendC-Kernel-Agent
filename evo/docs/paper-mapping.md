@@ -7,7 +7,7 @@
 | 论文元素 | 本仓位置 |
 |---------|---------|
 | §3（总览 Fig 1 pipeline）| `evo/README.md` + `evo/spec.md` |
-| §3.1 Problem Formulation | `evo/docs/m-mdp-formulation.md` |
+| §3.1 Problem Formulation | `evo/spec.md` §1（权威） |
 | §3.2 Memory Architecture + Value-Driven Retrieval | `evo/docs/memory-schema.md` + `evo/docs/retrieval-algorithm.md` + `evo/agents/retrieval-policy/AGENT.md` + `evo/agents/memory-curator/AGENT.md` |
 | §3.3 Stage 1: Cold-Start Drafting | `evo/docs/stage1-drafting.md` + `evo/agents/stage1-drafter/AGENT.md` |
 | §3.4 Stage 2: Continual Refining | `evo/docs/stage2-refining.md` + `evo/agents/stage2-refiner/AGENT.md` |
