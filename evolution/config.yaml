@@ -1,20 +1,20 @@
 # AscendC Kernel Agent — 进化配置
 
 # 算子配置（启动进化前修改为目标算子）
-operator_name: add_custom
+operator_name: gelu_custom
 target_chip: Ascend910B
-operator_spec_path: workspace/specs/add_custom.md
+operator_spec_path: workspace/specs/gelu_custom.md
 
 # 自定义算子工程配置
 project_mode: custom_operator    # custom_operator | direct_invoke (兼容)
-op_capital_name: AddCustom       # PascalCase 算子名
+op_capital_name: GeluCustom      # PascalCase 算子名
 msopgen_device: ai_core-Ascend910B
 
 # 工作区
-runs_dir: workspace/runs/add_custom
+runs_dir: workspace/runs/gelu_custom
 deploy_dir: workspace/deploy/opp
-cpp_extension_dir: workspace/runs/add_custom/test/CppExtension
-reference_py: workspace/runs/add_custom/test/reference.py
+cpp_extension_dir: workspace/runs/gelu_custom/test/CppExtension
+reference_py: workspace/runs/gelu_custom/test/reference.py
 
 # 进化参数
 max_wall_time: 168h         # 最大运行时间（7 天）
@@ -25,7 +25,7 @@ max_failed_attempts: 5      # 连续失败触发 repair 模式
 max_consecutive_redirects: 3  # 连续重定向失败则停止
 
 # 评分配置
-scoring_config_path: scoring/configs/default.json
+scoring_config_path: scoring/configs/gelu_custom.json
 metric_type: latency_us     # tflops | bandwidth_gbps | latency_us
 min_improvement_ratio: 0.02  # 最小提升门槛 2%
 warmup_rounds: 10

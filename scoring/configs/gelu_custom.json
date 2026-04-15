@@ -1,0 +1,44 @@
+{
+  "operator": "gelu_custom",
+  "description": "GELU activation custom operator test config",
+  "metric_type": "latency_us",
+  "min_improvement_ratio": 0.02,
+  "seed": [
+    {
+      "name": "seed_minimal_fp32",
+      "shape": [256],
+      "dtype": "fp32"
+    }
+  ],
+  "smoke": [
+    {
+      "name": "small_fp32",
+      "shape": [4096],
+      "dtype": "fp32"
+    },
+    {
+      "name": "small_fp16",
+      "shape": [4096],
+      "dtype": "fp16"
+    }
+  ],
+  "representative": [
+    {
+      "name": "medium_fp32",
+      "shape": [1048576],
+      "dtype": "fp32"
+    },
+    {
+      "name": "medium_fp16",
+      "shape": [1048576],
+      "dtype": "fp16"
+    }
+  ],
+  "stress": [
+    {
+      "name": "target_fp32",
+      "shape": [4096, 393216],
+      "dtype": "fp32"
+    }
+  ]
+}
