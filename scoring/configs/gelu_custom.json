@@ -1,0 +1,45 @@
+{
+  "operator": "gelu_custom",
+  "description": "GELU activation custom operator test config with boundary + multi-rank + extreme value coverage",
+  "metric_type": "latency_us",
+  "min_improvement_ratio": 0.02,
+
+  "_tier_design": [
+    "seed: 极小尺寸，秒级自测（Developer fast path）",
+    "boundary: 边界/非对齐/极值/多秩（仅正确性，不参与 performance）",
+    "smoke: 小尺寸，基本正确性",
+    "representative: 中等尺寸，主性能测量",
+    "stress: 大尺寸目标规模，仅在通过 submit 门槛时运行"
+  ],
+
+  "seed": [
+    {"name": "seed_minimal_fp32", "shape": [256], "dtype": "fp32"}
+  ],
+
+  "boundary": [
+    {"name": "bnd_size_1_fp32",      "shape": [1],             "dtype": "fp32", "_purpose": "极小尺寸"},
+    {"name": "bnd_odd_fp32",         "shape": [33],            "dtype": "fp32", "_purpose": "奇数非 2 幂次"},
+    {"name": "bnd_non_aligned_fp32", "shape": [7],             "dtype": "fp32", "_purpose": "小于 32B 对齐 (8 elem fp32)"},
+    {"name": "bnd_2d_fp32",          "shape": [32, 64],        "dtype": "fp32", "_purpose": "二维"},
+    {"name": "bnd_3d_fp32",          "shape": [8, 16, 32],     "dtype": "fp32", "_purpose": "三维"},
+    {"name": "bnd_4d_fp32",          "shape": [4, 8, 16, 16],  "dtype": "fp32", "_purpose": "四维"},
+    {"name": "bnd_extreme_fp32",     "shape": [1024],          "dtype": "fp32", "_purpose": "包含 inf/nan/large values", "input_mode": "extreme"},
+    {"name": "bnd_neg_large_fp32",   "shape": [1024],          "dtype": "fp32", "_purpose": "大负值（GELU 输出应趋近 0）", "input_mode": "neg_large"},
+    {"name": "bnd_near_zero_fp32",   "shape": [1024],          "dtype": "fp32", "_purpose": "接近 0 的小值", "input_mode": "near_zero"}
+  ],
+
+  "smoke": [
+    {"name": "small_fp32", "shape": [4096], "dtype": "fp32"},
+    {"name": "small_fp16", "shape": [4096], "dtype": "fp16"}
+  ],
+
+  "representative": [
+    {"name": "medium_fp32", "shape": [1048576], "dtype": "fp32"},
+    {"name": "medium_fp16", "shape": [1048576], "dtype": "fp16"},
+    {"name": "medium_2d_fp32", "shape": [1024, 1024], "dtype": "fp32"}
+  ],
+
+  "stress": [
+    {"name": "target_fp32", "shape": [4096, 393216], "dtype": "fp32"}
+  ]
+}

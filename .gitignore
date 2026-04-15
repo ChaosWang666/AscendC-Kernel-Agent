@@ -6,6 +6,7 @@
 # Evolution runtime artifacts — keep directories (via .gitkeep), ignore contents
 evolution/state.json
 evolution/logs/step_*.md
+evolution/logs/step_*/
 evolution/scores/v*.json
 evolution/redirects/step_*.md
 
@@ -13,9 +14,13 @@ evolution/redirects/step_*.md
 workspace/deploy/
 workspace/runs/*/attempts/
 workspace/runs/*/build_out/
+workspace/runs/*/best/*/build_out/
+workspace/runs/*/best/*/**/build_out/
 workspace/runs/*/test/CppExtension/build/
 workspace/runs/*/test/CppExtension/dist/
 workspace/runs/*/test/CppExtension/*.egg-info/
+workspace/runs/*/test/__pycache__/
+**/__pycache__/
 
 # Python / build
 __pycache__/

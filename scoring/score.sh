@@ -107,6 +107,7 @@ PYBIND_LOG="$LOG_DIR/pybind.log"
 CORRECTNESS_LOG="$LOG_DIR/correctness.log"
 PERFORMANCE_LOG="$LOG_DIR/performance.log"
 CORRECTNESS_SEED="$TMPDIR/correctness_seed.json"
+CORRECTNESS_BOUNDARY="$TMPDIR/correctness_boundary.json"
 CORRECTNESS_SMOKE="$TMPDIR/correctness_smoke.json"
 CORRECTNESS_REP="$TMPDIR/correctness_rep.json"
 CORRECTNESS_STRESS="$TMPDIR/correctness_stress.json"
@@ -329,6 +330,37 @@ print(r.get('correctness_total', 0.0))
     fi
     phase_end "correctness_seed"
     echo "Seed 正确性通过（kernel 基本成型）"
+fi
+
+# ============ Step 3.7: Boundary 正确性（非阻塞，诊断性）============
+# 如果 config 里有 boundary 级别，跑它。失败不阻塞后续，但记录到 score.json。
+echo ""
+echo ">>> Step 3.7: Boundary 正确性测试（非阻塞）"
+HAS_BOUNDARY=$(python3 -c "
+import json
+with open('$CONFIG_PATH') as f: cfg = json.load(f)
+print('yes' if cfg.get('boundary') else 'no')
+" 2>/dev/null || echo "no")
+
+if [ "$HAS_BOUNDARY" = "yes" ]; then
+    phase_begin
+    if [ "$USE_PYTORCH" = true ] && [ -f "$REFERENCE_PY" ]; then
+        bash "$SCRIPT_DIR/test_correctness.sh" \
+            "$OP_PATH" "$CONFIG_PATH" "$CORRECTNESS_BOUNDARY" "boundary" "$REFERENCE_PY" \
+            >> "$CORRECTNESS_LOG" 2>&1 || true
+    fi
+    phase_end "correctness_boundary"
+    BOUNDARY_PASS=$(python3 -c "
+import json, os
+if os.path.exists('$CORRECTNESS_BOUNDARY'):
+    with open('$CORRECTNESS_BOUNDARY') as f: r = json.load(f)
+    print(r.get('correctness_total', 0.0))
+else:
+    print('N/A')
+" 2>/dev/null || echo "N/A")
+    echo "Boundary 正确性: $BOUNDARY_PASS（非阻塞，记录到 score.json）"
+else
+    echo "（config 中无 boundary 级别，跳过）"
 fi
 
 # ============ Step 4: Smoke 正确性 ============
@@ -559,6 +591,10 @@ fi
 echo ""
 echo ">>> Step 9: 聚合评分"
 dump_phase_timings
+BOUNDARY_ARG=""
+if [ -f "$CORRECTNESS_BOUNDARY" ]; then
+    BOUNDARY_ARG="--boundary-result $CORRECTNESS_BOUNDARY"
+fi
 python3 "$SCRIPT_DIR/compute_score.py" \
     --version "$VERSION" \
     --correctness-result "$CORRECTNESS_ALL" \
@@ -567,6 +603,7 @@ python3 "$SCRIPT_DIR/compute_score.py" \
     --metric-type "$METRIC_TYPE" \
     --best-score "$BEST_SCORE" \
     --test-levels "$LEVELS_RUN" \
+    $BOUNDARY_ARG \
     --output "$SCORE_JSON"
 
 echo ""

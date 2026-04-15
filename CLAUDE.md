@@ -7,12 +7,13 @@
 - **K**: 领域知识库（本文件索引）
 - **f**: 评分函数 `scoring/score.sh`（正确性 + 性能）
 
-架构：**Agent Team**（`agents/AGENTS.md`）
+架构：**Agent Team**（`agents/AGENTS.md` — 6 角色）
 - **Architect Agent**（主 Agent）→ 任务理解、架构设计、流程编排
 - **Developer Agent** → 代码编写（op_host + op_kernel + tiling）
-- **Reviewer Agent** → 代码审查（7 维评分）
-- **Tester Agent** → 构建、部署、PyTorch 框架测试
-- **Supervisor Agent** → 仅在停滞时介入，不干预日常执行
+- **Reviewer Agent** → 代码审查 + docs 合规（与 Tester **并行**）
+- **Tester Agent** → 构建、部署、PyTorch 框架测试（与 Reviewer **并行**）
+- **Supervisor Agent** → 主动监测趋势（每 3 轮自检）+ 分级 WARN/ALERT/REDIRECT/BLOCK
+- **Reporter Agent** → 收敛时由 LLM 综合生成 `evolution/report.md`
 
 启动方式：直接用 Claude Code 加载 `agents/AGENTS.md`，Architect Agent 自主执行进化循环
 
@@ -34,9 +35,10 @@
 | Developer | `agents/developer/AGENT.md` | 代码编写：op_host / op_kernel / tiling |
 | Reviewer | `agents/reviewer/AGENT.md` | 代码审查：7 维质量评分、独立构建验证 |
 | Tester | `agents/tester/AGENT.md` | 测试验证：构建 → 部署 → PyTorch 框架测试 |
-| Supervisor | `agents/supervisor/AGENT.md` | 进化监督：仅在停滞时生成重定向指令 |
+| Supervisor | `agents/supervisor/AGENT.md` | 进化监督：主动监测 + 分级干预（stall_soft/variance/direction_repeated/knowledge_gap）|
+| Reporter | `agents/reporter/AGENT.md` | 收敛时 LLM 综合生成 `evolution/report.md` |
 
-团队编排：`agents/AGENTS.md`
+团队编排：`agents/AGENTS.md`（含 Agent 调用协议 + 并行派发规则 + YAML trailer 契约）
 
 ---
 
@@ -100,8 +102,28 @@ workspace/runs/{op_name}/test/
 | ascendc-direct-invoke-template | Kernel 直调工程骨架（参考） |
 | ascendc-registry-invoke-to-direct-invoke | aclnn 注册调用转 Kernel 直调 |
 | ascendc-msopgen-workflow | msopgen 自定义算子工程全链路（权限、芯片修正、TilingFunc 模板） |
+| **ascendc-kb-docs** ⭐️ | **Ascend C 官方深度文档（编程指南 + 工具链 + 实践案例，84 个 section）** |
 
-### Sources（Layer 3）— 搜索访问
+### KB Docs（Layer 3 深度）— 官方大型文档
+
+相对路径前缀：`Knowledge-base/coding-skills/docs/`
+
+**入口**：`Knowledge-base/coding-skills/docs/INDEX.md`（按章节 + 主题反向索引）
+**Section 目录**：`Knowledge-base/coding-skills/docs/sections/`（84 个拆分文件，每个 100-2000 行）
+
+| 前缀 | 覆盖 | 典型 section |
+|------|------|-------------|
+| `guide_1.*` / `guide_2.*` / `guide_3.*` | Ascend C 编程指南（入门/编程/实践） | `guide_2.2_编程模型.md`, `guide_3.8_SIMD_算子性能优化.md` |
+| `tools_3.*` ~ `tools_8.*` | 工具链手册（msKPP/msOpGen/msOpST/msSanitizer/msDebug/msProf） | `tools_8.3_工具使用.md`（msProf 命令参考） |
+| `guide2_3.10.*` | 优秀实践案例（FlashAttention / Matmul 14 子案例 / GroupedMatmul） | `guide2_3.10.1_FlashAttention_算子性能调优案例.md` |
+
+**使用规则**：
+1. 先 Read `INDEX.md` 定位章节，再 Read 单独 section 文件
+2. ❌ 禁止直接 Read 原始大文件（`算子开发指南.md` 等 >10K 行）
+3. Architect 的 Step 2.5 **必须** 引用至少 1 个 L3 section 到 DESIGN.md
+4. Reviewer 会校验 DESIGN.md 是否含 L3 引用
+
+### Sources（Layer 2）— 参考实现
 
 相对路径前缀：`Knowledge-base/coding-sources/`
 

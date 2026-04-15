@@ -202,40 +202,65 @@ Supervisor 将指令写入 `evolution/redirects/step_{N}.md`，下一轮 ANALYZE
 
 ### Step 2.5: KNOWLEDGE RETRIEVAL（知识检索 — 强制）
 
-**不检索不设计** —— DESIGN.md 如果没有"知识检索结果"节，Reviewer 应标记 FAIL。
+**不检索不设计** —— DESIGN.md 如果没有"知识检索结果"节，Reviewer **必须** 标记 FAIL。
+
+**三层知识（L1 → L2 → L3 按需串联）**：
+
+| 层 | 位置 | 用途 | 查询顺序 |
+|----|------|------|---------|
+| L1 Skills | `.claude/skills/` | 决策树（"该选哪种 tiling"）| 先查 |
+| **L3 Docs** | **`Knowledge-base/coding-skills/docs/sections/` (ascendc-kb-docs skill)** | **官方原理/API 规格/工具链/案例** | **中查** |
+| L2 Sources | `Knowledge-base/coding-sources/` | 参考算子实现 + SDK 示例 | 后查 |
 
 #### 种子阶段（current_version < 0）
 
-1. **按算子分类定位参考实现**（见 CLAUDE.md "参考实现导航" 表）：
+1. **先查 L3 Docs INDEX**（强制第一步）：
+   - 调用 `ascendc-kb-docs` skill（或直接 Read `Knowledge-base/coding-skills/docs/INDEX.md`）
+   - 从 INDEX 的反向索引定位 **至少 1 个** 相关 section
+   - Read 该 section 文件（单个 section 通常 100-2000 行，可完整加载）
+   - 常见主题映射：
+     - Tiling 设计 → `tools_3.3_性能建模.md`、`guide2_3.10.4_Matmul_性能调优案例.md`
+     - TPipe/TQue API → `guide_2.2_编程模型.md`、`guide_2.5_C_类库_API.md`
+     - FlashAttention/Matmul 范式 → `guide2_3.10.*`
+     - msProf 分析 → `tools_8.*`
+
+2. **按算子分类定位参考实现**（L2 Sources，见 CLAUDE.md "参考实现导航" 表）：
    - 确定算子类型（激活 / 归一化 / MatMul / Attention / 数学 / CV）
    - `ls Knowledge-base/coding-sources/ops-coding-sources/<对应路径>/` 确认参考算子存在
    - **至少读取 1 个最相似算子**的完整 `op_kernel/*.cpp` + `op_host/*.cpp`
-   
-2. **查阅 SDK 示例**：
+
+3. **查阅 SDK 示例**（L2 补充）：
    - `ls Knowledge-base/coding-sources/programming-coding-sources/asc-devkit/examples/` 按目录名匹配
    - 找到匹配示例后读取核心代码（通常 < 100 行）
 
-3. **查阅 API 文档**：
+4. **查阅 API 文档**（L2 补充，若 L3 docs 已覆盖可跳过）：
    - 在 `programming-coding-sources/asc-devkit/docs/api/context/` 确认核心 API 存在性和签名
-   - 使用 `ascendc-docs-search` skill 辅助（非替代直接读取）
+   - 使用 `ascendc-docs-search` skill 辅助
 
-4. **知识摘要写入 DESIGN.md**：
+5. **知识摘要写入 DESIGN.md**（**必含 L3 docs 引用**）：
    ```markdown
    ## 知识检索结果
-   
-   ### 参考实现
+
+   ### L3 官方文档（必需，来自 ascendc-kb-docs）
+   - **Section**: `Knowledge-base/coding-skills/docs/sections/{name}.md`
+   - **要点**: 一句话摘要该章节的关键指导
+   - **对本设计的启示**: {如何影响 tiling/buffer/pipeline 决策}
+
+   ### L2 参考实现
    - 算子: {name}, 路径: Knowledge-base/coding-sources/...
    - 设计模式: {Tiling 策略} + {Buffer 布局} + {Pipeline 同步}
    - 核心 API: {API 名称 + 签名}
-   
-   ### SDK 示例
+
+   ### L2 SDK 示例
    - 路径: .../examples/.../{name}.asc
    - 模式: {CopyIn → Compute → CopyOut / 其他}
-   
+
    ### 与目标算子的差异
    - {差异 1}
    - {差异 2}
    ```
+
+**Reviewer 校验规则**：若 DESIGN.md 缺 "L3 官方文档" 节或引用的 section 路径不存在，判 FAIL，Architect 必须补查并重写。
 
 #### 优化阶段（current_version >= 0）
 
@@ -293,31 +318,83 @@ claude --print --dangerously-skip-permissions -p "
 "
 ```
 
-### Step 5: DISPATCH REVIEWER
+### Step 5+6: 并行 DISPATCH Reviewer + Tester ⭐️
 
-Developer 完成后，启动 Reviewer Agent（同上两种方式）。
+**Developer 完成后**，Reviewer 和 Tester **并行启动**（单消息多 Agent 调用），节省墙钟时间约 30%。
 
-**Agent 工具**：
+#### 职责边界（不重叠）
+
+| Agent | 做什么 | 不做什么 |
+|-------|--------|---------|
+| **Reviewer** | 静态代码检视、DESIGN.md 合规（含 L3 docs 引用校验）、独立编译验证 | **不跑 PyTorch 测试**、不生成 v{N}.json |
+| **Tester** | 编译 + 部署 + pybind + 跑 PyTorch 正确性/性能测试、解析 score.sh 结果 | **不做代码审查**、不写 REVIEW.md |
+
+#### 并行派发示例
+
+```python
+# 单消息，两个 Agent 工具调用 → 并行执行
+[
+    Agent(
+        description="Reviewer: <op_name> v{N}",
+        subagent_type="general-purpose",
+        prompt="""你是 Reviewer Agent，读取 agents/reviewer/AGENT.md 作为角色定义。
+
+【输入】
+- 算子工程: {CANDIDATE_DIR}/{OpName}Custom/
+- 设计文档: {CANDIDATE_DIR}/docs/DESIGN.md
+- 实现计划: {CANDIDATE_DIR}/docs/PLAN.md
+
+【输出】
+- {CANDIDATE_DIR}/docs/REVIEW.md（必须带 YAML trailer）
+
+【约束】
+- 预算: max_session_duration=10m
+- 若 DESIGN.md 缺 'L3 官方文档' 节（Knowledge-base/coding-skills/docs/sections/...）→ 直接判 FAIL
+- 若是 seed v0，使用 seed 阶段阈值
+"""
+    ),
+    Agent(
+        description="Tester: <op_name> v{N}",
+        subagent_type="general-purpose",
+        prompt="""你是 Tester Agent，读取 agents/tester/AGENT.md 作为角色定义。
+
+【输入】
+- 算子工程: {CANDIDATE_DIR}/{OpName}Custom/
+- 测试配置: scoring/configs/{op_name}.json
+- CppExt:  workspace/runs/{op_name}/test/CppExtension/
+- 参考:    workspace/runs/{op_name}/test/reference.py
+
+【输出】
+- evolution/scores/v{N}.json（通过 bash scoring/score.sh 自动生成）
+- YAML trailer 报告 status + exit_code + failure_type
+
+【约束】
+- 预算: max_session_duration=15m
+- 解析 score.sh 退出码契约（0 成功 / 2-6 各阶段失败）
+"""
+    )
+]
 ```
-Agent(
-  description="Reviewer: <op_name> v{N}",
-  subagent_type="general-purpose",
-  prompt="你是 Reviewer Agent，读取 agents/reviewer/AGENT.md 作为角色定义。\n
-          审查：{CANDIDATE_DIR}/{OpName}Custom/\n
-          设计文档：{CANDIDATE_DIR}/docs/DESIGN.md\n
-          若是 seed v0，使用 seed 阶段阈值（见 Reviewer AGENT.md Stage-aware Scoring 节）。\n
-          输出：{CANDIDATE_DIR}/docs/REVIEW.md（带 YAML trailer）。"
-)
-```
 
-如果 REVIEW.md 判定 FAIL：
-- 将 REVIEW.md 反馈给 Developer 修复
-- 最多 3 轮修复循环
-- 仍未通过 → 记录 failed_attempts++，进入下一步
+#### 合流判定
 
-### Step 6: DISPATCH TESTER
+两 agent 都返回后，Architect 读取：
 
-审查通过后，启动 Tester Agent 或直接运行 score.sh。
+| Reviewer | Tester | Architect 动作 |
+|----------|--------|----------------|
+| PASS | exit=0 + correctness=1.0 | → Step 7 EVALUATE（正常路径）|
+| **FAIL（docs 缺失等）** | any | → 不用看 Tester 结果，驳回 Developer 补 DESIGN.md；最多 3 轮 |
+| FAIL（代码质量）| exit=0 | → 若性能达标可接受，Reviewer 意见作为 follow-up |
+| PASS | exit=5（correctness）| → failed_attempts++，记录失败 |
+| PASS | exit=6（performance）| → 若 correctness=1 则 stall_counter++；不失败 |
+
+如果 Reviewer 判 FAIL：
+- 最多 3 轮修复循环（Dev → Rev）
+- 3 轮后仍 FAIL → `failed_attempts++`，跳过本版本
+
+### Step 6-legacy: DISPATCH TESTER（仅作为回退说明）
+
+若无 Tester Agent 环境，Architect 可直接运行 score.sh：
 
 **Agent 工具**：
 ```
@@ -376,6 +453,57 @@ cat evolution/scores/v{N}.json | python3 -m json.tool
   }
   ```
   Supervisor 使用此记录做失败模式去重（同一 root_cause_signature 出现 ≥ 2 次 → 该方向被禁止）
+
+### Step 8.5: 收敛判定 + Reporter 派发 ⭐️（新增）
+
+Step 8 更新 state 后，检查是否满足任一收敛条件：
+
+| 条件 | 判定 |
+|------|------|
+| A. `consecutive_redirects >= max_consecutive_redirects` | 多方向都无法突破 |
+| B. `stall_counter >= stall_threshold` 且 Supervisor 最近 redirect verdict 为 `TERMINATE_SUCCESS` | 无提升且监督确认终止 |
+| C. `total_attempts >= max_versions` | 版本预算耗尽 |
+| D. `best_score >= target_performance`（若 config 中设置）| 达标 |
+| E. 墙钟 `>= max_wall_time` | 时间预算耗尽 |
+
+任一命中 → **派发 Reporter Agent**（使用 Claude Code `Agent()` 工具）：
+
+```python
+Agent(
+    description="Generate evolution report",
+    subagent_type="general-purpose",
+    prompt=f"""你是 Reporter Agent，读取 agents/reporter/AGENT.md 作为角色定义。
+
+【输入】
+- evolution/state.json
+- evolution/scores/v*.json（所有版本）
+- evolution/logs/step_*.md
+- workspace/specs/{op_name}.md
+- workspace/runs/{op_name}/attempts/*/docs/DESIGN.md
+
+【输出】
+- evolution/report.md（带 YAML trailer）
+
+【算子】{op_name}
+【预算】max_session_duration=15m
+【触发原因】{trigger_reason}
+"""
+)
+```
+
+Reporter 完成后，Architect 读取 report.md 末尾的 YAML trailer 验证 `status: success`，然后更新 state.json：
+
+```json
+"convergence_summary": {
+  "status": "converged",
+  "trigger": "<A|B|C|D|E>",
+  "auto_report_path": "evolution/report.md",
+  "report_generator": "reporter_agent",
+  "report_generated_at": "<ISO>"
+}
+```
+
+然后**正式退出主循环**。
 
 ## 种子生成（v0）
 

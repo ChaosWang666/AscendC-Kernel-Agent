@@ -97,6 +97,8 @@ def main():
                         help="当前最佳评分（用于计算 improvement）")
     parser.add_argument("--test-levels", default="",
                         help="已运行的测试级别（逗号分隔）")
+    parser.add_argument("--boundary-result", default=None,
+                        help="boundary 测试结果 JSON（可选，诊断性）")
     parser.add_argument("--output", required=True, help="输出评分 JSON")
     args = parser.parse_args()
 
@@ -111,6 +113,23 @@ def main():
         except Exception:
             phase_timings = {}
 
+    # Boundary 结果（诊断性，不阻塞主流程）
+    boundary_summary = None
+    if args.boundary_result:
+        try:
+            with open(args.boundary_result) as f:
+                boundary_data = json.load(f)
+            boundary_summary = {
+                "boundary_total": boundary_data.get("correctness_total", 0.0),
+                "boundary_configs_run": len(boundary_data.get("configs", [])),
+                "boundary_failed_cases": [
+                    c.get("name") for c in boundary_data.get("configs", [])
+                    if c.get("correctness") != 1
+                ],
+            }
+        except Exception:
+            boundary_summary = {"boundary_total": "N/A", "error": "failed to load boundary result"}
+
     score = {
         "version": f"v{args.version}",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -123,6 +142,8 @@ def main():
         "configs": [],
         "phase_timings": phase_timings,
     }
+    if boundary_summary is not None:
+        score["boundary_summary"] = boundary_summary
 
     # Pre-correctness 阶段性失败（environment / compile / deploy / pybind）
     # 这些阶段没有 correctness / performance 结果可解析，直接写 error_log 返回
@@ -170,10 +191,14 @@ def main():
             entry = {
                 "name": c.get("name", "unknown"),
                 "level": c.get("level", "unknown"),
+                "shape": c.get("shape"),
+                "dtype": c.get("dtype"),
                 "correctness": c.get("correctness", 0),
                 "max_abs_error": c.get("max_abs_error", 0.0),
                 "max_rel_error": c.get("max_rel_error", 0.0),
             }
+            if c.get("input_mode") and c.get("input_mode") != "normal":
+                entry["input_mode"] = c["input_mode"]
             for k in diagnostic_keys:
                 if k in c and c[k] is not None:
                     entry[k] = c[k]
@@ -213,6 +238,46 @@ def main():
         score["improvement_over_best"] = compute_improvement(
             score["performance_total"], args.best_score, args.metric_type
         )
+
+    # 聚合 test_coverage（shape / dtype / level / rank 覆盖情况）
+    # 合并主 configs 和 boundary configs 以获得完整覆盖视图
+    shapes = set()
+    dtypes = set()
+    levels_covered = set()
+    ranks = set()
+    input_modes = set()
+    coverage_sources = list(score["configs"])
+    if args.boundary_result:
+        try:
+            with open(args.boundary_result) as f:
+                boundary_data = json.load(f)
+            coverage_sources.extend(boundary_data.get("configs", []))
+        except Exception:
+            pass
+
+    for c in coverage_sources:
+        if c.get("shape") is not None:
+            shapes.add(str(c["shape"]))
+            try:
+                ranks.add(len(c["shape"]) if isinstance(c["shape"], list) else 1)
+            except Exception:
+                pass
+        if c.get("dtype"):
+            dtypes.add(c["dtype"])
+        if c.get("level"):
+            levels_covered.add(c["level"])
+        if c.get("input_mode") and c.get("input_mode") != "normal":
+            input_modes.add(c["input_mode"])
+
+    score["test_coverage"] = {
+        "shapes_tested": sorted(shapes),
+        "dtypes_tested": sorted(dtypes),
+        "levels_covered": sorted(levels_covered),
+        "ranks_tested": sorted(ranks),
+        "input_modes_tested": sorted(input_modes),
+        "total_configs": len(coverage_sources),
+        "boundary_attempted": boundary_summary is not None,
+    }
 
     with open(args.output, "w") as f:
         json.dump(score, f, indent=2, ensure_ascii=False)
