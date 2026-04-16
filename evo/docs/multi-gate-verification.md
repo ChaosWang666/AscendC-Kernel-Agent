@@ -75,10 +75,10 @@ Step 5: 返回 trailer
 
 若 rule-based 通过 + `config.anti_hack.model_based.enabled=true`：
 
-派发 Reviewer Agent（复用 `agents/reviewer/AGENT.md`）以 `prompt_mode=anti_hack_audit`：
+派发 Reviewer Agent（复用 `evo/agents/reviewer/AGENT.md`）以 `prompt_mode=anti_hack_audit`：
 
 ```
-你是 Anti-Hacking Auditor。读 agents/reviewer/AGENT.md 作为角色框架。
+你是 Anti-Hacking Auditor。读 evo/agents/reviewer/AGENT.md 作为角色框架。
 
 【任务】
 判断给定 kernel 是否存在 subtle harness manipulation（不是明显的 import/API 作弊，

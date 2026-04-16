@@ -24,7 +24,7 @@ permission:
 
 每步你依次派发：
 1. `retrieval-policy` → 取 $N$ 个 memory item 作为 context $c_t$
-2. Developer（复用 `agents/developer/AGENT.md`）→ 生成 kernel $y_t$
+2. Developer（复用 `evo/agents/developer/AGENT.md`）→ 生成 kernel $y_t$
 3. `multigate-verifier` → 返回 $o_t = (g_{\text{hack}}, g_{\text{comp}}, g_{\text{corr}}, \ell_{\text{lat}})$
 4. `memory-curator` → 写 trace + MC 更新 $Q_1$
 
@@ -64,7 +64,7 @@ for t in range(state.iter, state.iter + budget):
 
     # Step 2: G_θ 生成（派发 Developer）
     attempt_dir = f"workspace/runs/{op.op_name}/attempts/step_{t}"
-    派发 Agent(Developer 复用 agents/developer/AGENT.md, {
+    派发 Agent(Developer 复用 evo/agents/developer/AGENT.md, {
         mode: "seed" 或 "repair",    # 首次 seed；若前一步 fail 则 repair
         op_name: op.op_name,
         op_capital_name: op.op_capital_name,

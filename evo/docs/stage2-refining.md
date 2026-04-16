@@ -113,7 +113,7 @@ $$p_t = \begin{cases} \text{Uniform}(P(x)), & \text{w.p. } \varepsilon_t \\ \arg
 ## Developer 派发 Prompt 模板（mode=optimize）
 
 ```
-你是 Developer Agent，读 agents/developer/AGENT.md 作为基础角色。
+你是 Developer Agent，读 evo/agents/developer/AGENT.md 作为基础角色。
 
 【本次任务：EVO Stage 2 Refining】
 - 目标：基于 start point 降低 latency

@@ -64,7 +64,7 @@
 | 论文 | 本仓 |
 |------|------|
 | B.1 Rule-based | `evo/docs/multi-gate-verification.md` §Anti-Hacking-第一层 + `config.yaml: anti_hack.rule_based` |
-| B.2 Model-based LLM Auditor | `evo/docs/multi-gate-verification.md` §Anti-Hacking-第二层 + `agents/reviewer/AGENT.md` 的 `prompt_mode=anti_hack_audit`|
+| B.2 Model-based LLM Auditor | `evo/docs/multi-gate-verification.md` §Anti-Hacking-第二层 + `evo/agents/reviewer/AGENT.md` 的 `prompt_mode=anti_hack_audit`|
 
 ## App C: Baseline Methodologies
 

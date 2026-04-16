@@ -1,6 +1,6 @@
 # EVO Agent Team
 
-> 与 AVO `agents/AGENTS.md` 平级；复用其 `Agent()` 派发机制和 YAML trailer 协议，新增 EVO 专属角色。
+> EVO 框架的团队协议（与 `main` 分支 AVO 的 `agents/AGENTS.md` 平级）。采用 Claude Code `Agent()` 派发机制和下文定义的 YAML trailer 协议。
 
 ## 团队构成
 
@@ -13,14 +13,14 @@
 | **memory-curator** | $\mathcal{M}$ 管理（§3.2 + Eq. 3）| 追加 `bank.jsonl`；执行 Eq. 3 更新 `q_values.json`；维护 PopArt `stats.json`；保存 `start_points/{op}/` | stage1-drafter / stage2-refiner（每步） |
 | **multigate-verifier** | $V$（§3.5）| anti-hack 二级过滤 → 调 `scoring/score.sh` → 映射退出码 → 返回 $(g_{\text{hack}}, g_{\text{comp}}, g_{\text{corr}}, \ell_{\text{lat}})$ | stage1-drafter / stage2-refiner |
 
-**复用 AVO 角色**（不在 `evo/agents/` 下重复定义）：
+**EVO 内置辅助角色**（均位于 `evo/agents/` 下）：
 
-| 角色 | 来源 | 在 EVO 中的用法 |
+| 角色 | 路径 | 在 EVO 中的用法 |
 |------|------|----------------|
-| Developer（$G_\theta$）| `agents/developer/AGENT.md` | 由 stage agents 派发；prompt 注入 `retrieval_context` 和（Stage 2）`start_point` |
-| Reviewer（anti-hack auditor）| `agents/reviewer/AGENT.md` | 由 multigate-verifier 在 model-based anti-hack 阶段派发（`prompt_mode: anti_hack_audit`） |
+| Developer（$G_\theta$）| `evo/agents/developer/AGENT.md` | 由 stage agents 派发；prompt 注入 `retrieval_context` 和（Stage 2）`start_point`。EVO 分支剥离 AVO 时已从 `agents/developer/` 内聚到此处。 |
+| Reviewer（anti-hack auditor）| `evo/agents/reviewer/AGENT.md` | 由 `multigate-verifier` 在 model-based anti-hack 阶段派发（`prompt_mode: anti_hack_audit`）。同上，原 AVO 角色已内聚。 |
 
-**不复用**：AVO `Architect / Supervisor / Reporter`（其职责被 EVO 结构替代）。
+**EVO 未使用的 AVO 角色**（仅在 `main` 分支）：Architect / Supervisor / Reporter / Tester —— 其职责被 EVO 结构（stage agents + Q 值机制 + multigate-verifier）替代。
 
 ## 工作流图
 
@@ -63,16 +63,25 @@ Agent(
 
 ## YAML Trailer 协议
 
-继承 AVO：见 `agents/AGENTS.md` §"返回契约"——schema、语义、Architect 合流规则原样沿用。
+所有子 agent 产出文件**底部**写入 YAML trailer，派发者读取并决定下一步：
 
-EVO 只扩展 `role` 的取值域：
-
-```
+```yaml
+---
 role: campaign-orchestrator | stage1-drafter | stage2-refiner
     | retrieval-policy | memory-curator | multigate-verifier
+    | developer | reviewer
+status: success | partial | fail
+summary: 一句话说明本次派发的结果
+artifacts:
+  - path: <产物路径 1>
+  - path: <产物路径 2>
+next_action: continue | fail_fast | escalate
+details:
+  # 角色特定字段；每个 AGENT.md 文末给出该角色的 details.* 字段清单
+---
 ```
 
-每个 AGENT.md 文末给出该角色的 `details.*` 字段清单。
+**合流规则**：派发者（stage agents 或 campaign-orchestrator）按 `status` 判断成功/失败，按 `next_action` 决定继续、早退出或上抛到上级。
 
 ## 并行派发规则（同 AVO）
 

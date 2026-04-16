@@ -1,0 +1,277 @@
+\begin{thebibliography}{54}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Barnett et~al.(2024)Barnett, Kurniawan, Thudumu, Brannelly, and Abdelrazek]{barnett2024seven}
+Scott Barnett, Stefanus Kurniawan, Srikanth Thudumu, Zach Brannelly, and Mohamed Abdelrazek.
+\newblock Seven failure points when engineering a retrieval augmented generation system.
+\newblock In \emph{Proceedings of the IEEE/ACM 3rd International Conference on AI Engineering-Software Engineering for AI}, pp.\  194--199, 2024.
+
+\bibitem[Baronio et~al.(2025)Baronio, Marsella, Pan, Guo, and Alberti]{baronio2025kevin}
+Carlo Baronio, Pietro Marsella, Ben Pan, Simon Guo, and Silas Alberti.
+\newblock {Kevin}: Multi-turn {RL} for generating {CUDA} kernels.
+\newblock \emph{arXiv preprint arXiv:2507.11948}, 2025.
+
+\bibitem[Cao et~al.(2024)Cao, Shu, Yu, Zhu, Wichers, Liu, and Meng]{cao2024beyond}
+Meng Cao, Lei Shu, Lei Yu, Yun Zhu, Nevan Wichers, Yinxiao Liu, and Lei Meng.
+\newblock Beyond sparse rewards: Enhancing reinforcement learning with language model critique in text generation.
+\newblock \emph{arXiv preprint arXiv:2401.07382}, 2024.
+
+\bibitem[Chhikara et~al.(2025)Chhikara, Khant, Aryan, Singh, and Yadav]{chhikara2025mem0}
+P~Chhikara, D~Khant, S~Aryan, T~Singh, and D~Yadav.
+\newblock {Mem0}: Building production-ready {AI} agents with scalable long-term memory (2025).
+\newblock \emph{URL https://arxiv.org/abs/2504.19413}, 2025.
+
+\bibitem[Choquette et~al.(2021)Choquette, Gandhi, Giroux, Stam, and Krashinsky]{choquette2021nvidia}
+Jack Choquette, Wishwesh Gandhi, Olivier Giroux, Nick Stam, and Ronny Krashinsky.
+\newblock {NVIDIA} {A100} tensor core {GPU}: Performance and innovation.
+\newblock \emph{IEEE Micro}, 41\penalty0 (2):\penalty0 29--35, 2021.
+
+\bibitem[Chung et~al.(2024)Chung, Hou, Longpre, Zoph, Tay, Fedus, Li, Wang, Dehghani, Brahma, et~al.]{chung2024scaling}
+Hyung~Won Chung, Le~Hou, Shayne Longpre, Barret Zoph, Yi~Tay, William Fedus, Yunxuan Li, Xuezhi Wang, Mostafa Dehghani, Siddhartha Brahma, et~al.
+\newblock Scaling instruction-finetuned language models.
+\newblock \emph{Journal of Machine Learning Research}, 25\penalty0 (70):\penalty0 1--53, 2024.
+
+\bibitem[Contal \& McGoldrick(2024)Contal and McGoldrick]{contal2024ragsys}
+Emile Contal and Garrin McGoldrick.
+\newblock {RAGSys}: Item-cold-start recommender as {RAG} system.
+\newblock \emph{arXiv preprint arXiv:2405.17587}, 2024.
+
+\bibitem[Dong et~al.(2025)Dong, Yang, Liu, Wang, Qi, Tarokh, Rangadurai, and Yang]{dong2025stark}
+Juncheng Dong, Yang Yang, Tao Liu, Yang Wang, Feng Qi, Vahid Tarokh, Kaushik Rangadurai, and Shuang Yang.
+\newblock {STARK}: Strategic team of agents for refining kernels.
+\newblock \emph{arXiv preprint arXiv:2510.16996}, 2025.
+
+\bibitem[Du et~al.(2025)Du, Yuan, Zhang, Yi, Hu, Chen, Zhu, Zheng, Zou, Chang, et~al.]{du2025akg}
+Jinye Du, Quan Yuan, Zuyao Zhang, Yanzhi Yi, Jiahui Hu, Wangyi Chen, Yiyang Zhu, Qishui Zheng, Wenxiang Zou, Xiangyu Chang, et~al.
+\newblock {AKG} kernel agent: A multi-agent framework for cross-platform kernel synthesis.
+\newblock \emph{arXiv preprint arXiv:2512.23424}, 2025.
+
+\bibitem[Fang et~al.(2025)Fang, Liang, Wang, Wu, Qiao, Xie, Huang, Chen, and Zhang]{fang2025memp}
+Runnan Fang, Yuan Liang, Xiaobin Wang, Jialong Wu, Shuofei Qiao, Pengjun Xie, Fei Huang, Huajun Chen, and Ningyu Zhang.
+\newblock {MEMP}: Exploring agent procedural memory.
+\newblock \emph{arXiv preprint arXiv:2508.06433}, 2025.
+
+\bibitem[Hessel et~al.(2019)Hessel, Soyer, Espeholt, Czarnecki, Schmitt, and Van~Hasselt]{hessel2019multi}
+Matteo Hessel, Hubert Soyer, Lasse Espeholt, Wojciech Czarnecki, Simon Schmitt, and Hado Van~Hasselt.
+\newblock Multi-task deep reinforcement learning with {PopArt}.
+\newblock In \emph{Proceedings of the AAAI Conference on Artificial Intelligence}, volume~33, pp.\  3796--3803, 2019.
+
+\bibitem[Izacard et~al.(2023)Izacard, Lewis, Lomeli, Hosseini, Petroni, Schick, Dwivedi-Yu, Joulin, Riedel, and Grave]{izacard2023atlas}
+Gautier Izacard, Patrick Lewis, Maria Lomeli, Lucas Hosseini, Fabio Petroni, Timo Schick, Jane Dwivedi-Yu, Armand Joulin, Sebastian Riedel, and Edouard Grave.
+\newblock {Atlas}: Few-shot learning with retrieval augmented language models.
+\newblock \emph{Journal of Machine Learning Research}, 24\penalty0 (251):\penalty0 1--43, 2023.
+
+\bibitem[Jain et~al.(2024)Jain, Han, Gu, Li, Yan, Zhang, Wang, Solar-Lezama, Sen, and Stoica]{jain2024livecodebench}
+Naman Jain, King Han, Alex Gu, Wen-Ding Li, Fanjia Yan, Tianjun Zhang, Sida Wang, Armando Solar-Lezama, Koushik Sen, and Ion Stoica.
+\newblock {LiveCodeBench}: Holistic and contamination free evaluation of large language models for code.
+\newblock \emph{arXiv preprint arXiv:2403.07974}, 2024.
+
+\bibitem[Joel et~al.(2024)Joel, Wu, and Fard]{joel2410survey}
+Sathvik Joel, Jie~JW Wu, and Fatemeh~H Fard.
+\newblock A survey on {LLM}-based code generation for low-resource and domain-specific programming languages, 2024.
+\newblock \emph{URL https://arxiv. org/abs/2410.03981}, 2024.
+
+\bibitem[Jouppi et~al.(2023)Jouppi, Kurian, Li, Ma, Nagarajan, Nai, Patil, Subramanian, Swing, Towles, et~al.]{jouppi2023tpu}
+Norm Jouppi, George Kurian, Sheng Li, Peter Ma, Rahul Nagarajan, Lifeng Nai, Nishant Patil, Suvinay Subramanian, Andy Swing, Brian Towles, et~al.
+\newblock {TPU} v4: An optically reconfigurable supercomputer for machine learning with hardware support for embeddings.
+\newblock In \emph{Proceedings of the 50th annual international symposium on computer architecture}, pp.\  1--14, 2023.
+
+\bibitem[Kakade(2003)]{kakade2003sample}
+Sham~Machandranath Kakade.
+\newblock \emph{On the sample complexity of reinforcement learning}.
+\newblock University of London, University College London (United Kingdom), 2003.
+
+\bibitem[Kaplan et~al.(2020)Kaplan, McCandlish, Henighan, Brown, Chess, Child, Gray, Radford, Wu, and Amodei]{kaplan2020scaling}
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom~B Brown, Benjamin Chess, Rewon Child, Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei.
+\newblock Scaling laws for neural language models.
+\newblock \emph{arXiv preprint arXiv:2001.08361}, 2020.
+
+\bibitem[Kostikova et~al.(2025)Kostikova, Wang, Bajri, P{\"u}tz, Paa{\ss}en, and Eger]{kostikova2025lllms}
+Aida Kostikova, Zhipin Wang, Deidamea Bajri, Ole P{\"u}tz, Benjamin Paa{\ss}en, and Steffen Eger.
+\newblock {LLLMs}: A data-driven survey of evolving research on limitations of large language models.
+\newblock \emph{arXiv preprint arXiv:2505.19240}, 2025.
+
+\bibitem[Lewis et~al.(2020)Lewis, Perez, Piktus, Petroni, Karpukhin, Goyal, K{\"u}ttler, Lewis, Yih, Rockt{\"a}schel, et~al.]{lewis2020retrieval}
+Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich K{\"u}ttler, Mike Lewis, Wen-tau Yih, Tim Rockt{\"a}schel, et~al.
+\newblock Retrieval-augmented generation for knowledge-intensive {NLP} tasks.
+\newblock \emph{Advances in Neural Information Processing Systems}, 33:\penalty0 9459--9474, 2020.
+
+\bibitem[Li et~al.(2025{\natexlab{a}})Li, Li, Gao, Shi, Li, Wang, Huang, WangHaojie, Wang, Han, et~al.]{li2025tritonbench}
+Jianling Li, Shangzhan Li, Zhenye Gao, Qi~Shi, Yuxuan Li, Zefan Wang, Jiacheng Huang, WangHaojie WangHaojie, Jianrong Wang, Xu~Han, et~al.
+\newblock {TritonBench}: Benchmarking large language model capabilities for generating {Triton} operators.
+\newblock In \emph{Findings of the Association for Computational Linguistics: ACL 2025}, pp.\  23053--23066, 2025{\natexlab{a}}.
+
+\bibitem[Li et~al.(2025{\natexlab{b}})Li, Wang, He, Li, Shi, Li, Hu, Che, Han, Liu, et~al.]{li2025autotriton}
+Shangzhan Li, Zefan Wang, Ye~He, Yuxuan Li, Qi~Shi, Jianling Li, Yonggang Hu, Wanxiang Che, Xu~Han, Zhiyuan Liu, et~al.
+\newblock {AutoTriton}: Automatic {Triton} programming with reinforcement learning in {LLMs}.
+\newblock \emph{arXiv preprint arXiv:2507.05687}, 2025{\natexlab{b}}.
+
+\bibitem[Li et~al.(2025{\natexlab{c}})Li, Xi, Li, Chen, Chen, Song, Niu, Wang, Yang, Tang, et~al.]{li2025memos}
+Zhiyu Li, Chenyang Xi, Chunyu Li, Ding Chen, Boyu Chen, Shichao Song, Simin Niu, Hanyu Wang, Jiawei Yang, Chen Tang, et~al.
+\newblock {Memos}: A memory {OS} for {AI} system.
+\newblock \emph{arXiv preprint arXiv:2507.03724}, 2025{\natexlab{c}}.
+
+\bibitem[Liao et~al.(2021)Liao, Tu, Xia, Liu, Zhou, Yuan, and Hu]{liao2021ascend}
+Heng Liao, Jiajin Tu, Jing Xia, Hu~Liu, Xiping Zhou, Honghui Yuan, and Yuxing Hu.
+\newblock {Ascend}: A scalable and unified architecture for ubiquitous deep neural network computing: Industry track paper.
+\newblock In \emph{2021 IEEE International Symposium on High-Performance Computer Architecture (HPCA)}, pp.\  789--801. IEEE, 2021.
+
+\bibitem[Liu et~al.(2025)Liu, Mei, Lin, Xue, Wang, Xu, Wu, Zhang, Lin, Dong, et~al.]{liu2025deepseek}
+Aixin Liu, Aoxue Mei, Bangcai Lin, Bing Xue, Bingxuan Wang, Bingzheng Xu, Bochao Wu, Bowei Zhang, Chaofan Lin, Chen Dong, et~al.
+\newblock {DeepSeek-v3.2}: Pushing the frontier of open large language models.
+\newblock \emph{arXiv preprint arXiv:2512.02556}, 2025.
+
+\bibitem[Longpre et~al.(2023)Longpre, Hou, Vu, Webson, Chung, Tay, Zhou, Le, Zoph, Wei, et~al.]{longpre2023flan}
+Shayne Longpre, Le~Hou, Tu~Vu, Albert Webson, Hyung~Won Chung, Yi~Tay, Denny Zhou, Quoc~V Le, Barret Zoph, Jason Wei, et~al.
+\newblock The {FLAN} collection: Designing data and methods for effective instruction tuning.
+\newblock In \emph{International Conference on Machine Learning}, pp.\  22631--22648. PMLR, 2023.
+
+\bibitem[Madaan et~al.(2022)Madaan, Tandon, Clark, and Yang]{madaan2022memprompt}
+Aman Madaan, Niket Tandon, Peter Clark, and Yiming Yang.
+\newblock {MemPrompt}: Memory-assisted prompt editing with user feedback, 2022.
+
+\bibitem[Madaan et~al.(2023)Madaan, Tandon, Gupta, Hallinan, Gao, Wiegreffe, Alon, Dziri, Prabhumoye, Yang, et~al.]{madaan2023self}
+Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah Wiegreffe, Uri Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, et~al.
+\newblock {Self-Refine}: Iterative refinement with self-feedback.
+\newblock \emph{Advances in Neural Information Processing Systems}, 36:\penalty0 46534--46594, 2023.
+
+\bibitem[Minaee et~al.(2024)Minaee, Mikolov, Nikzad, Chenaghlu, Socher, Amatriain, and Gao]{minaee2024large}
+Shervin Minaee, Tomas Mikolov, Narjes Nikzad, Meysam Chenaghlu, Richard Socher, Xavier Amatriain, and Jianfeng Gao.
+\newblock Large language models: A survey.
+\newblock \emph{arXiv preprint arXiv:2402.06196}, 2024.
+
+\bibitem[Novikov et~al.(2025)Novikov, V{\~u}, Eisenberger, Dupont, Huang, Wagner, Shirobokov, Kozlovskii, Ruiz, Mehrabian, et~al.]{novikov2025alphaevolve}
+Alexander Novikov, Ng{\^a}n V{\~u}, Marvin Eisenberger, Emilien Dupont, Po-Sen Huang, Adam~Zsolt Wagner, Sergey Shirobokov, Borislav Kozlovskii, Francisco~JR Ruiz, Abbas Mehrabian, et~al.
+\newblock {AlphaEvolve}: A coding agent for scientific and algorithmic discovery.
+\newblock \emph{arXiv preprint arXiv:2506.13131}, 2025.
+
+\bibitem[Ouyang et~al.(2025)Ouyang, Guo, Arora, Zhang, Hu, Re, and Mirhoseini]{ouyang2025kernel}
+Anne Ouyang, Simon Guo, Simran Arora, Alex~L Zhang, William Hu, Christopher Re, and Azalia Mirhoseini.
+\newblock {KernelBench}: Can {LLMs} write efficient {GPU} kernels?
+\newblock In Aarti Singh, Maryam Fazel, Daniel Hsu, Simon Lacoste-Julien, Felix Berkenkamp, Tegan Maharaj, Kiri Wagstaff, and Jerry Zhu (eds.), \emph{Proceedings of the 42nd International Conference on Machine Learning}, volume 267 of \emph{Proceedings of Machine Learning Research}, pp.\  47356--47415. PMLR, 13--19 Jul 2025.
+
+\bibitem[Packer et~al.(2023)Packer, Fang, Patil, Lin, Wooders, and Gonzalez]{packer2023memgpt}
+Charles Packer, Vivian Fang, Shishir~G. Patil, Kevin Lin, Sarah Wooders, and Joseph Gonzalez.
+\newblock {MemGPT}: Towards {LLMs} as operating systems.
+\newblock \emph{ArXiv}, abs/2310.08560, 2023.
+
+\bibitem[Park et~al.(2023)Park, O'Brien, Cai, Morris, Liang, and Bernstein]{park2023generative}
+Joon~Sung Park, Joseph O'Brien, Carrie~Jun Cai, Meredith~Ringel Morris, Percy Liang, and Michael~S Bernstein.
+\newblock Generative agents: Interactive simulacra of human behavior.
+\newblock In \emph{Proceedings of the 36th annual acm symposium on user interface software and technology}, pp.\  1--22, 2023.
+
+\bibitem[Qi et~al.(2025)Qi, Yang, Zhang, and Yang]{qi2025sample}
+Han Qi, Haochen Yang, Qiaosheng Zhang, and Zhuoran Yang.
+\newblock Sample-efficient reinforcement learning from human feedback via information-directed sampling.
+\newblock \emph{arXiv preprint arXiv:2502.05434}, 2025.
+
+\bibitem[Ran et~al.(2025)Ran, Xie, Ji, Hua, Wu, Cao, Guo, Hao, Li, Hu, et~al.]{ran2025kernelband}
+Dezhi Ran, Shuxiao Xie, Mingfang Ji, Ziyue Hua, Mengzhou Wu, Yuan Cao, Yuzhe Guo, Yu~Hao, Linyi Li, Yitao Hu, et~al.
+\newblock {KernelBand}: Boosting {LLM}-based kernel optimization with a hierarchical and hardware-aware multi-armed bandit.
+\newblock \emph{arXiv preprint arXiv:2511.18868}, 2025.
+
+\bibitem[Robbins \& Siegmund(1971)Robbins and Siegmund]{robbins1971convergence}
+Herbert Robbins and David Siegmund.
+\newblock A convergence theorem for non negative almost supermartingales and some applications.
+\newblock In \emph{Optimizing methods in statistics}, pp.\  233--257. Elsevier, 1971.
+
+\bibitem[Shinn et~al.(2023)Shinn, Cassano, Gopinath, Narasimhan, and Yao]{shinn2023reflexion}
+Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu Yao.
+\newblock {Reflexion}: Language agents with verbal reinforcement learning.
+\newblock \emph{Advances in Neural Information Processing Systems}, 36:\penalty0 8634--8652, 2023.
+
+\bibitem[Silvano et~al.(2025)Silvano, Ielmini, Ferrandi, Fiorin, Curzel, Benini, Conti, Garofalo, Zambelli, Calore, et~al.]{silvano2025survey}
+Cristina Silvano, Daniele Ielmini, Fabrizio Ferrandi, Leandro Fiorin, Serena Curzel, Luca Benini, Francesco Conti, Angelo Garofalo, Cristian Zambelli, Enrico Calore, et~al.
+\newblock A survey on deep learning hardware accelerators for heterogeneous {HPC} platforms.
+\newblock \emph{ACM Computing Surveys}, 57\penalty0 (11):\penalty0 1--39, 2025.
+
+\bibitem[Sutton \& Barto(2018)Sutton and Barto]{sutton2018reinforcement}
+Richard~S Sutton and Andrew~G Barto.
+\newblock \emph{Reinforcement learning: An introduction}.
+\newblock MIT press, 2018.
+
+\bibitem[Wang et~al.(2023)Wang, Xie, Jiang, Mandlekar, Xiao, Zhu, Fan, and Anandkumar]{wang2023voyager}
+Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar, Chaowei Xiao, Yuke Zhu, Linxi Fan, and Anima Anandkumar.
+\newblock {Voyager}: An open-ended embodied agent with large language models.
+\newblock \emph{arXiv preprint arXiv:2305.16291}, 2023.
+
+\bibitem[Wang et~al.(2025)Wang, Antoniades, Elazar, Amayuelas, Albalak, Zhang, and Wang]{wang2024generalization}
+Xinyi Wang, Antonis Antoniades, Yanai Elazar, Alfonso Amayuelas, Alon Albalak, Kexun Zhang, and William Wang.
+\newblock Generalization vs. memorization: Tracing language models' capabilities back to pretraining data.
+\newblock In Y.~Yue, A.~Garg, N.~Peng, F.~Sha, and R.~Yu (eds.), \emph{International Conference on Learning Representations}, volume 2025, pp.\  49948--49968, 2025.
+
+\bibitem[Wen et~al.(2025)Wen, Zhang, Li, Liu, Xie, and Zhang]{wen2025multikernelbench}
+Zhongzhen Wen, Yinghui Zhang, Zhong Li, Zhongxin Liu, Linna Xie, and Tian Zhang.
+\newblock {MultiKernelBench}: A multi-platform benchmark for kernel generation.
+\newblock \emph{arXiv eprints, pp. arXiv--2507}, 2025.
+
+\bibitem[Woo et~al.(2025)Woo, Zhu, Nie, Jia, Wang, and Park]{woo2025tritonrl}
+Jiin Woo, Shaowei Zhu, Allen Nie, Zhen Jia, Yida Wang, and Youngsuk Park.
+\newblock {TritonRL}: Training {LLMs} to think and code {Triton} without cheating.
+\newblock \emph{arXiv preprint arXiv:2510.17891}, 2025.
+
+\bibitem[Wu(2023)]{wu2023pytorch}
+Peng Wu.
+\newblock {PyTorch} 2.0: The journey to bringing compiler technologies to the core of {PyTorch} (keynote).
+\newblock In \emph{Proceedings of the 21st ACM/IEEE International Symposium on Code Generation and Optimization}, pp.\  1--1, 2023.
+
+\bibitem[Wu et~al.(2025)Wu, Wang, Mei, Cai, Fu, Yang, Wen, Yang, Shen, Wang, et~al.]{wu2025evolver}
+Rong Wu, Xiaoman Wang, Jianbiao Mei, Pinlong Cai, Daocheng Fu, Cheng Yang, Licheng Wen, Xuemeng Yang, Yufan Shen, Yuxin Wang, et~al.
+\newblock {Evolver}: Self-evolving {LLM} agents through an experience-driven lifecycle.
+\newblock \emph{arXiv preprint arXiv:2510.16079}, 2025.
+
+\bibitem[Xie et~al.(2025)Xie, Wei, Cao, Zhao, Deng, Li, Dai, Gao, Chang, Yu, et~al.]{xie2025mhc}
+Zhenda Xie, Yixuan Wei, Huanqi Cao, Chenggang Zhao, Chengqi Deng, Jiashi Li, Damai Dai, Huazuo Gao, Jiang Chang, Kuai Yu, et~al.
+\newblock mhc: Manifold-constrained hyper-connections.
+\newblock \emph{arXiv preprint arXiv:2512.24880}, 2025.
+
+\bibitem[Yan et~al.(2024)Yan, Liu, Wang, Li, Chen, Wang, Lin, Zhao, Zhu, Sundaram, et~al.]{yan2024codescope}
+Weixiang Yan, Haitian Liu, Yunkun Wang, Yunzhe Li, Qian Chen, Wen Wang, Tingyu Lin, Weishan Zhao, Li~Zhu, Hari Sundaram, et~al.
+\newblock {CodeScope}: An execution-based multilingual multitask multidimensional benchmark for evaluating {LLMs} on code understanding and generation.
+\newblock In \emph{Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)}, pp.\  5511--5558, 2024.
+
+\bibitem[Yang et~al.(2025)Yang, Li, Yang, Zhang, Hui, Zheng, Yu, Gao, Huang, Lv, et~al.]{yang2025qwen3}
+An~Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo~Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et~al.
+\newblock {Qwen3} technical report.
+\newblock \emph{arXiv preprint arXiv:2505.09388}, 2025.
+
+\bibitem[Yao et~al.(2023)Yao, Yu, Zhao, Shafran, Griffiths, Cao, and Narasimhan]{yao2023tree}
+Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Tom Griffiths, Yuan Cao, and Karthik Narasimhan.
+\newblock Tree of thoughts: Deliberate problem solving with large language models.
+\newblock \emph{Advances in Neural Information Processing Systems}, 36:\penalty0 11809--11822, 2023.
+
+\bibitem[Yu et~al.(2026)Yu, Zang, Tsai, Wu, Shen, Zhang, Wang, Xiao, Shi, Luo, et~al.]{yu2026towards}
+Yang Yu, Peiyu Zang, Chi~Hsu Tsai, Haiming Wu, Yixin Shen, Jialing Zhang, Haoyu Wang, Zhiyou Xiao, Jingze Shi, Yuyu Luo, et~al.
+\newblock Towards automated kernel generation in the era of {LLMs}.
+\newblock \emph{arXiv preprint arXiv:2601.15727}, 2026.
+
+\bibitem[Zhang et~al.(2026)Zhang, Wang, Zhou, Liao, Feng, Zhang, Wen, Li, Xiong, Qi, et~al.]{zhang2026memrl}
+Shengtao Zhang, Jiaqian Wang, Ruiwen Zhou, Junwei Liao, Yuchen Feng, Weinan Zhang, Ying Wen, Zhiyu Li, Feiyu Xiong, Yutao Qi, et~al.
+\newblock {MemRL}: Self-evolving agents via runtime reinforcement learning on episodic memory.
+\newblock \emph{arXiv preprint arXiv:2601.03192}, 2026.
+
+\bibitem[Zhang et~al.(2025)Zhang, Chen, Lee, and Du]{zhang2025settling}
+Zihan Zhang, Yuxin Chen, Jason Lee, and Simon~S Du.
+\newblock Settling the sample complexity of online reinforcement learning.
+\newblock \emph{Journal of the ACM}, 72\penalty0 (3):\penalty0 1--63, 2025.
+
+\bibitem[Zhou et~al.(2023)Zhou, Liu, Xu, Iyer, Sun, Mao, Ma, Efrat, Yu, Yu, et~al.]{zhou2023lima}
+Chunting Zhou, Pengfei Liu, Puxin Xu, Srinivasan Iyer, Jiao Sun, Yuning Mao, Xuezhe Ma, Avia Efrat, Ping Yu, Lili Yu, et~al.
+\newblock {LIMA}: Less is more for alignment.
+\newblock \emph{Advances in Neural Information Processing Systems}, 36:\penalty0 55006--55021, 2023.
+
+\bibitem[Zhou et~al.(2025)Zhou, Chen, Guo, Yan, Lee, Wang, Lee, Zhang, Shao, Yang, and Wang]{zhou2508memento}
+Huichi Zhou, Yihang Chen, Siyuan Guo, Xue Yan, Kin~Hei Lee, Zihan Wang, Ka~Yiu Lee, Guchun Zhang, Kun Shao, Linyi Yang, and Jun Wang.
+\newblock {Memento}: Fine-tuning {LLM} agents without fine-tuning {LLMs}.
+\newblock \emph{arXiv preprint arXiv: 2508.16153}, 2025.
+
+\bibitem[Zhu et~al.(2025)Zhu, Peng, Guo, Chen, Guo, Wen, Qin, Chen, Zhou, Gao, et~al.]{zhu2025qimeng}
+Xinguo Zhu, Shaohui Peng, Jiaming Guo, Yunji Chen, Qi~Guo, Yuanbo Wen, Hang Qin, Ruizhi Chen, Qirui Zhou, Ke~Gao, et~al.
+\newblock {QiMeng-Kernel}: Macro-thinking micro-coding paradigm for {LLM}-based high-performance {GPU} kernel generation.
+\newblock \emph{arXiv preprint arXiv:2511.20100}, 2025.
+
+\end{thebibliography}

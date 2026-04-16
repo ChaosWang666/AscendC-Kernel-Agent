@@ -1,6 +1,6 @@
 # EVO 框架形式化规格
 
-> 与 AVO `spec.md` 平级；本文件是 `evo/` 的权威数学规格，所有 Agent 实现必须与此一致。
+> 本文件是 `evo/` 的权威数学规格，所有 Agent 实现必须与此一致（AVO 版本 `spec.md` 位于 `main` 分支）。
 > 基于论文 `EVO-paper/main.tex` §3（Method）。
 
 ---
@@ -45,7 +45,7 @@ $f$ 的实现 = `memory-curator` 根据 verifier 输出 $o_t$ 更新 `state.json
 
 $$\pi(y_t \mid s_t, \mathcal{M}_t) = G_\theta(a_t \mid s_t, c_t) \cdot \mu(c_t \mid s_t, \mathcal{M}_t) \quad\text{(Eq. 3 — 论文 Eq. 2 编号)}$$
 
-- $G_\theta$ 固定（预训练 LLM）= Claude Code 派发 `agents/developer/AGENT.md`
+- $G_\theta$ 固定（预训练 LLM）= Claude Code 派发 `evo/agents/developer/AGENT.md`
 - $\mu$ 通过 RL 学习 = `evo/agents/retrieval-policy/AGENT.md`
 
 ---
@@ -173,7 +173,7 @@ $$g_{\text{feas}}(o_t) \triangleq g_{\text{hack}} \wedge g_{\text{comp}} \wedge 
 
 **Rule-based**（`config.yaml: anti_hack.rule_based`）：禁用 `torch.*`、`F.*` 等高层 API 在 `op_kernel/`；AST 检查；常量 tensor 返回检测。
 
-**Model-based**：派发 `agents/reviewer/AGENT.md` 做 LLM 审计（`prompt_mode: anti_hack_audit`）。
+**Model-based**：派发 `evo/agents/reviewer/AGENT.md` 做 LLM 审计（`prompt_mode: anti_hack_audit`）。
 
 ### 5.4 后端绑定
 

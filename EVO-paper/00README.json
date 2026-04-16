@@ -1,0 +1,61 @@
+{
+   "sources" : [
+      {
+         "usage" : "toplevel",
+         "filename" : "main.tex"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/ablation_levels_correctness.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/attention_ascend_combined_timeline_bars.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/category_correctness_speed_bins.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/category_correctness_speed_bins_gpt-5.2_20260121_011901_level1_level2.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/kernelbench_cuda_combined_timeline_bars.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/memory_ablation_combined.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/q_value_ablation_combined.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/refinement_speedup.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/set3_convergence_curves.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/speedup_vs_first_correct_gpt-5.2_20260121_011901_level1_level2.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "figures/topk_ablation.pdf"
+      },
+      {
+         "usage" : "ignore",
+         "filename" : "iclr2026_conference.bst"
+      }
+   ],
+   "spec_version" : 1,
+   "texlive_version" : "2025",
+   "process" : {
+      "compiler" : "pdflatex"
+   }
+}

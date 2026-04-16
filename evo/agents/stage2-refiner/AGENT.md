@@ -76,7 +76,7 @@ for t in range(state.iter, state.iter + budget):
 
     # Step 3: G_θ 改写（派发 Developer optimize 模式）
     attempt_dir = f"workspace/runs/{op.op_name}/attempts/step_{t}"
-    派发 Agent(Developer 复用 agents/developer/AGENT.md, {
+    派发 Agent(Developer 复用 evo/agents/developer/AGENT.md, {
         mode: "optimize",
         op_name: op.op_name,
         op_capital_name: op.op_capital_name,

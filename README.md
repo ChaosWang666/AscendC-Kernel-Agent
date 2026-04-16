@@ -1,131 +1,119 @@
-# AscendC Kernel Agent
+# AscendC Kernel Agent — EVO Branch
 
-Autonomous Ascend C operator generation and evolutionary optimization system for Huawei Ascend NPUs.
+Autonomous, **value-driven, cross-operator** Ascend C kernel synthesis framework for Huawei Ascend NPUs. This branch reproduces the **EvoKernel** paper (`EVO-paper/main.tex`).
 
-Inspired by **AVO (Agentic Variation Operators)**, the system uses an **Agent Team** to iteratively generate, evaluate, and evolve high-performance Ascend C custom operator projects — producing full engineering artifacts (op_host, op_kernel, CppExtension) that integrate with the PyTorch framework.
+> The `main` branch hosts the separate **AVO** (Agentic Variation Operators) framework — a single-operator evolutionary loop. The two frameworks share scoring / knowledge base / workspace test infrastructure but are otherwise independent.
 
-**Core formula:** `Vary(P_t) = Agent(P_t, K, f)`
+## Core Formula (paper Eq. 3)
 
-| Symbol | Meaning |
-|--------|---------|
-| **P_t** | Version lineage — all committed operator versions and their scores |
-| **K** | Domain knowledge base — 16 skills, 88K+ source files, API docs |
-| **f** | Scoring function — correctness + performance (`scoring/score.sh`) |
+```
+π(y_t | s_t, M_t) = G_θ(a_t | s_t, c_t) · μ(c_t | s_t, M_t)
+```
+
+| Symbol | Role | Implementation |
+|--------|------|---------------|
+| **G_θ** | Generation policy (pretrained LLM) | `evo/agents/developer/AGENT.md` (dispatched by stage agents) |
+| **μ** | Value-driven retrieval policy | `evo/agents/retrieval-policy/AGENT.md` |
+| **M_t** | Cross-operator shared memory bank | `evo/memory/` |
+| **V** | Multi-gate verifier | `evo/agents/multigate-verifier/AGENT.md` (wraps `scoring/score.sh`) |
+| **Q_1, Q_2** | Stage-specific Q values (Drafting / Refining) | `evo/memory/q_values.json` |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│              Architect Agent (主 Agent)               │
-│           驱动进化循环，编排 Agent Team                │
-│                                                       │
-│  ┌───────────┐  ┌──────────┐  ┌─────────────────┐   │
-│  │ Developer  │  │ Reviewer │  │    Tester        │   │
-│  │            │  │          │  │                   │   │
-│  │ op_host/   │  │ 7 维评分  │  │ 构建→部署→PyTorch │   │
-│  │ op_kernel/ │  │ 独立验证  │  │ 正确性+性能      │   │
-│  └───────────┘  └──────────┘  └─────────────────┘   │
-│                                                       │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │              Knowledge Base (K)                   │ │
-│  │  16 Skills + 88K+ source files + API docs        │ │
-│  └─────────────────────────────────────────────────┘ │
-│                                                       │
-│  git commit (on improvement) ←── scoring/score.sh    │
-└─────────────────────────────────────────────────────┘
-                        │
-      ┌─────────────────▼─────────────────┐
-      │  Supervisor Agent（仅在停滞时介入） │
-      │  分析进化轨迹 → 生成重定向指令      │
-      └───────────────────────────────────┘
+campaign-orchestrator  ──consumes operator_queue──▶
+    │
+    ├── stage1-drafter (Cold-Start Drafting)
+    │      retrieval-policy → developer (G_θ) → multigate-verifier → memory-curator
+    │      exits on first feasible kernel (binary reward ±1)
+    │
+    └── stage2-refiner (Continual Refining)
+           ε-greedy start_point + refinement context → developer → verifier → memory-curator
+           reward = tanh(log b_t − log ℓ_lat), PopArt-normalized
 ```
 
-The **Architect Agent** orchestrates the evolution loop:
-1. Analyzes current state and profiling data
-2. Designs optimization approach (DESIGN.md + PLAN.md)
-3. Dispatches Developer to implement code changes
-4. Dispatches Reviewer for quality verification
-5. Dispatches Tester to build, deploy, and test via PyTorch framework
-6. If the candidate passes correctness and improves performance → commit + promote to `best/`
-7. Loops until stop condition
+See `evo/README.md` for full agent team, memory schema, and paper-to-repo mapping.
 
-The **Supervisor Agent** only intervenes during stagnation (non-interfering, per AVO paper principles).
+## Key Differentiators vs AVO (main branch)
+
+| Dimension | AVO (main) | EVO (this branch) |
+|-----------|-----------|-------------------|
+| Scope | Single-operator evolution | Cross-operator campaigns (L1 → L2 transfer) |
+| Retrieval | Architect heuristics | Dense top-K → ε-greedy Q filter |
+| Reward | Implicit review scoring | Explicit Eq. 4 (±1) + Eq. 5 (tanh) + PopArt |
+| Memory | Per-operator `evolution/state.json` | Global `evo/memory/bank.jsonl` + `q_values.json` |
+| Loop | Single Edit-Review-Test cycle | Two-stage: Drafting → Refining |
+| Intervention | Supervisor heuristics | Q-value auto-adjustment |
 
 ## Project Structure
 
 ```
-├── agents/                            # Agent Team definitions
-│   ├── AGENTS.md                      # Team orchestration entry point
-│   ├── architect/                     # Main Agent: design + dispatch
-│   ├── developer/                     # Code implementation
-│   ├── reviewer/                      # Code review (7-dimension scoring)
-│   ├── tester/                        # Build → Deploy → PyTorch testing
-│   └── supervisor/                    # Non-interfering evolution oversight
-├── scoring/                           # Scoring pipeline
-│   ├── score.sh                       # 9-step orchestrator
-│   ├── compile.sh                     # Custom operator project build
-│   ├── deploy.sh                      # .run package deployment
-│   ├── build_pybind.sh               # CppExtension Python binding
-│   ├── test_correctness.py           # PyTorch framework correctness
-│   ├── test_performance.py           # NPU Event-based timing
-│   ├── compute_score.py              # Score aggregation
-│   └── configs/                       # Per-operator scoring configs
-├── evolution/
-│   ├── config.yaml                    # Evolution parameters
-│   ├── state.json                     # Persistent state (runtime)
-│   ├── scores/                        # Per-version score JSONs
-│   └── redirects/                     # Supervisor redirect directives
-├── workspace/
-│   ├── specs/                         # Operator specifications
-│   ├── templates/                     # CppExtension + reference templates
-│   ├── runs/{op_name}/
-│   │   ├── best/                      # Current best (read-only baseline)
-│   │   │   └── {OpName}Custom/        # Custom operator project
-│   │   ├── attempts/step_{N}/         # Candidate workspaces
-│   │   └── test/                      # PyTorch test infrastructure
-│   └── deploy/opp/                    # Operator deployment directory
-├── Knowledge-base/
-│   └── coding-sources/                # 88K+ reference implementations & API docs
-├── .claude/skills/                    # 16 structured domain skills
-├── AVO-paper/                         # Reference paper
-├── spec.md                            # Full technical specification
-└── CLAUDE.md                          # Agent knowledge index
+├── evo/                            EVO framework (this branch's core)
+│   ├── README.md                   Framework overview + paper mapping
+│   ├── spec.md                     M-MDP formalization (all paper equations)
+│   ├── config.yaml                 Hyperparameters + operator_queue
+│   ├── agents/                     8 roles (6 EVO-specific + developer + reviewer)
+│   ├── memory/                     bank.jsonl, q_values.json, stats.json, seed/, start_points/
+│   ├── state/                      campaign.json + episodes/{op}/
+│   ├── docs/                       Algorithm details (stage1, stage2, multi-gate, q-value)
+│   └── benchmark/                  MultiKernelBench evaluation
+│
+├── scoring/                        Shared scoring pipeline (AVO + EVO)
+│   ├── score.sh                    9-step orchestrator (exit codes 0-6)
+│   ├── compile.sh / deploy.sh / build_pybind.sh
+│   ├── test_correctness.py / test_performance.py
+│   └── configs/                    Per-operator scoring configs
+│
+├── workspace/                      Shared workspace
+│   ├── specs/                      Operator specifications
+│   ├── templates/                  CppExtension + reference templates
+│   ├── runs/{op_name}/test/        PyTorch reference + Python binding
+│   └── deploy/opp/                 OPP deployment directory
+│
+├── Knowledge-base/                 Shared domain knowledge (88K+ files)
+├── .claude/skills/                 16 Ascend C skills (auto-loaded)
+├── EVO-paper/                      EvoKernel paper sources
+├── CLAUDE.md                       Claude Code project instructions
+└── README.md                       (this file)
 ```
 
-## Custom Operator Projects
+Runtime directories created by `scoring/score.sh`:
+- `evolution/scores/v{N}.json` — per-invocation score (also read by `multigate-verifier`)
+- `evolution/logs/step_{N}/*.log` — per-phase build/deploy/correctness logs
 
-The system generates **full custom operator engineering projects** (not simple kernel direct invocations):
+## Quick Start
 
-```
-{OpName}Custom/
-├── {op_name}_custom.json      — Operator definition (inputs/outputs/types)
-├── build.sh                    — Build orchestrator
-├── op_host/                    — Host side (OpDef + TilingFunc + InferShape)
-├── op_kernel/                  — Device side (AscendC Kernel)
-└── build_out/
-    └── custom_opp_*.run        — Self-extracting deployment package
-```
+### Prerequisites
 
-Testing is done through the **PyTorch framework**:
-1. Build operator project → deploy → build CppExtension Python binding
-2. Compare `Model` (PyTorch native) vs `ModelNew` (custom operator) with `torch.allclose`
-3. Measure performance via NPU Event timing
+- Huawei CANN toolkit at `/usr/local/Ascend/ascend-toolkit/`
+- Ascend NPU device available
+- Python 3.8+ with PyTorch and `torch_npu`
+- CMake
 
-## Scoring Pipeline
+### Launch an EVO campaign
 
-The scoring system (`scoring/score.sh`) uses a **tiered early-exit** strategy:
+```bash
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
 
-```
-Build → Deploy → Python Bind → Smoke Correctness → Representative Correctness
-    → Representative Performance → [Stress Correctness + Performance]
+# One-shot
+claude --print -p "读 evo/README.md 和 evo/config.yaml，派发 evo/agents/campaign-orchestrator/AGENT.md 开始 EVO campaign"
+
+# Interactive (more stable)
+claude
+> 读取 evo/agents/AGENTS.md 作为团队协议，然后按 evo/config.yaml 的 operator_queue 依次派发 campaign-orchestrator
 ```
 
-- **Build/Deploy/Bind failure** → score 0, early exit
-- **Smoke correctness failure** → early exit
-- **Performance** → compared against current best; must exceed `min_improvement_ratio` (default 2%) to trigger stress tests
-- **Stress tests** → only run when candidate looks promising
+### Score a single candidate
 
-### Correctness Thresholds
+```bash
+bash scoring/score.sh workspace/runs/{op_name}/attempts/step_0 scoring/configs/{op_name}.json
+```
+
+Exit codes: `0` complete success · `1` environment · `2` compile · `3` deploy · `4` pybind · `5` correctness · `6` performance.
+
+## Correctness Thresholds
+
+Defaults (from `scoring/test_correctness.py`, per-config overridable):
 
 | dtype | rtol | atol |
 |-------|------|------|
@@ -133,85 +121,27 @@ Build → Deploy → Python Bind → Smoke Correctness → Representative Correc
 | FP16  | 1e-3 | 1e-3 |
 | BF16  | 1e-2 | 1e-2 |
 
-## Knowledge Base
-
-Three-layer architecture for efficient knowledge retrieval:
-
-| Layer | Content | Access |
-|-------|---------|--------|
-| **L1** | `CLAUDE.md` — global index (<4K tokens) | Auto-loaded every session |
-| **L2** | 16 Skills — structured domain knowledge | On-demand file read |
-| **L3** | 88K+ source files — reference implementations, API docs | Grep/Glob search |
+Paper §4.1 uses `atol=rtol=1e-2`; EVO config defaults to paper settings.
 
 ## Supported Hardware
 
-| Codename | Chip | Architecture | Key Features |
-|----------|------|-------------|--------------|
-| A2 | Ascend 910 | arch32 (DAV_1001) | — |
-| A3 | Ascend 910B / 310P | arch32 (DAV_2201/3002) | Production target |
-| A5 | Ascend 950 | arch35 (DAV_3510) | Regbase, SIMT, FP8 |
-
-## Quick Start
-
-### Prerequisites
-
-- Huawei CANN toolkit installed (`/usr/local/Ascend/ascend-toolkit/`)
-- Ascend NPU device available
-- Python 3.8+ with PyTorch and torch_npu
-- CMake
-
-### Run the evolution loop
-
-```bash
-# Configure your operator in evolution/config.yaml, then:
-claude --print -p "读取 agents/AGENTS.md 和 evolution/config.yaml，开始执行进化循环"
-```
-
-### Score a single candidate
-
-```bash
-bash scoring/score.sh workspace/runs/{op_name}/attempts/step_0 scoring/configs/default.json
-```
-
-### Build and test an operator manually
-
-```bash
-# Build custom operator project
-cd workspace/runs/{op_name}/attempts/step_0/{OpName}Custom
-./build.sh
-
-# Deploy
-cd build_out && ./custom_opp_*.run
-
-# Build Python binding
-cd workspace/runs/{op_name}/test/CppExtension
-bash build_and_run.sh
-
-# Test correctness
-python3 scoring/test_correctness.py \
-    --reference workspace/runs/{op_name}/test/reference.py \
-    --config scoring/configs/default.json \
-    --output result.json
-```
-
-## Configuration
-
-Key parameters in `evolution/config.yaml`:
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `project_mode` | custom_operator | Project type (custom_operator / direct_invoke) |
-| `max_wall_time` | 168h (7 days) | Maximum evolution runtime |
-| `max_versions` | 100 | Maximum committed versions |
-| `max_session_duration` | 15m | Per-session agent time limit |
-| `stall_threshold` | 5 | Consecutive no-improvement rounds before redirect |
-| `min_improvement_ratio` | 0.02 | Minimum 2% performance gain to commit |
-| `warmup_rounds` | 10 | Performance test warmup rounds |
-| `repeat_rounds` | 100 | Performance test measurement rounds |
+| Codename | Chip | Architecture |
+|----------|------|-------------|
+| A2 | Ascend 910 | arch32 (DAV_1001) |
+| A3 | Ascend 910B / 310P | arch32 (DAV_2201/3002) |
+| A5 | Ascend 950 | arch35 (DAV_3510) — Regbase, SIMT, FP8 |
 
 ## References
 
-- AVO paper: `./AVO-paper/`
-- Technical specification: `./spec.md`
-- Agent knowledge index: `./CLAUDE.md`
-- Agent Team definition: `./agents/AGENTS.md`
+- **EvoKernel paper**: `./EVO-paper/main.tex`
+- **EVO framework overview**: `./evo/README.md`
+- **Formal spec (M-MDP + proofs)**: `./evo/spec.md`
+- **Paper → repo mapping**: `./evo/docs/paper-mapping.md`
+- **AVO framework** (separate, single-operator): see `main` branch
+
+## Branch Layout
+
+```bash
+git checkout main   # AVO framework (Architect + Developer + Reviewer + Tester + Supervisor + Reporter)
+git checkout EVO    # this branch — EVO framework (campaign-orchestrator + 2 stages + retrieval + memory + verifier)
+```

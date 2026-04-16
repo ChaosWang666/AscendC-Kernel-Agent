@@ -127,7 +127,7 @@ multigate-verifier 从 state / context 读 `selected_by` 字段或 `step % sampl
     description="anti-hack audit: {op} step {t}",
     subagent_type="general-purpose",
     prompt=f"""
-你是 Anti-Hacking Auditor Agent，读 agents/reviewer/AGENT.md 作为基础角色定义，
+你是 Anti-Hacking Auditor Agent，读 evo/agents/reviewer/AGENT.md 作为基础角色定义，
 **但仅执行 anti_hack_audit 子任务**。
 
 【输入】

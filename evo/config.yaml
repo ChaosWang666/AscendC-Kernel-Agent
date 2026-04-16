@@ -1,9 +1,10 @@
 # EVO 框架配置（EvoKernel 论文复现）
 # 超参符号遵循论文 §3；默认值取自论文 §4.1 或合理推断
 #
-# 与 AVO evolution/config.yaml 的关系：operator_queue / per_op_budget /
-# scoring_config 等字段与 AVO 同构（便于复用 scoring/score.sh），EVO 在此基础上
-# 新增 retrieval / q_update / reward_stage2 / anti_hack 等 M-MDP 专属字段。
+# operator_queue / per_op_budget / scoring_config 等字段与 main 分支 AVO 的
+# evolution/config.yaml 同构（便于复用 scoring/score.sh）；EVO 在此基础上新增
+# retrieval / q_update / reward_stage2 / anti_hack 等 M-MDP 专属字段。
+# evolution/ 目录由 scoring/score.sh 在运行时按需 mkdir，仓内不保留该目录。
 
 # ========== 运行模式 ==========
 mode: multi_op_stream              # 论文原设定（跨算子 campaign）
@@ -54,7 +55,7 @@ reward_stage2:
 
 # ========== Verifier（§3.5） ==========
 verifier:
-  score_sh_path: scoring/score.sh                          # 复用 AVO
+  score_sh_path: scoring/score.sh                          # 共享基建
   anti_hack_rules_path: evo/docs/multi-gate-verification.md
   tolerance_atol: 1e-2             # 论文 §4.1
   tolerance_rtol: 1e-2
@@ -70,8 +71,8 @@ verifier:
 
 # ========== LLM Generator ==========
 generator:
-  dispatch: claude_code_agent      # 通过 Agent() 派发 agents/developer/AGENT.md
-  developer_agent: agents/developer/AGENT.md
+  dispatch: claude_code_agent      # 通过 Agent() 派发 evo/agents/developer/AGENT.md
+  developer_agent: evo/agents/developer/AGENT.md
   max_session_duration: 15m        # 单次 Developer 派发超时
   # 注入到 Developer prompt 的字段
   context_injection:
@@ -104,7 +105,7 @@ anti_hack:
     scope_files: ["op_kernel/*.cpp", "op_kernel/*.h"]
   model_based:
     enabled: true                  # LLM auditor（派发 Reviewer-like 独立审查）
-    auditor_agent: agents/reviewer/AGENT.md
+    auditor_agent: evo/agents/reviewer/AGENT.md
     prompt_mode: anti_hack_audit
     # 何时触发 model-based（默认 first_feasible 以控成本；每次 ~30s）
     # first_feasible: 仅对每算子第一个 g_feas=1 的 kernel 审计（高成本 / 高价值）

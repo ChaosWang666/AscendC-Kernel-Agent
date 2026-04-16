@@ -70,7 +70,7 @@ def stage1_drafting(x, M, T1, N, K, epsilon_schedule, alpha):
 Stage 1 drafter 派发 Developer 时必须注入：
 
 ```
-你是 Developer Agent，读 agents/developer/AGENT.md 作为基础角色。
+你是 Developer Agent，读 evo/agents/developer/AGENT.md 作为基础角色。
 
 【本次任务：EVO Stage 1 Drafting】
 - 目标：为算子 {op_name} 生成首个可行 kernel
