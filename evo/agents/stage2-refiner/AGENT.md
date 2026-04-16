@@ -111,12 +111,14 @@ for t in range(state.iter, state.iter + budget):
         observation: o_t,
         reward_raw: r_raw,
         start_point_id: p_t.id,
-        context_ids: [m.id for m in c_t]
+        context_items: c_t   # 完整 items 含 selected_by
     })
     # memory-curator 内部：
     #   更新 stats.json 的 μ_2, σ_2
     #   r_norm = (r_raw - μ_2) / σ_2
     #   对 {p_t} ∪ c_t 里每个 m 执行 Q_2(m) += α(r_norm - Q_2(m))
+    #   ⚠ 去重 start_point_id 与 context_items 重叠（F7）
+    #   ⚠ selected_by=="seed_api" 的 items 跳过 Q_2 更新（只增 visit_2）
     #   若 g_feas: 追加 y_t 到 bank.jsonl + start_points/{op}/
     读 trailer.details.r_norm, q2_updated_count
 

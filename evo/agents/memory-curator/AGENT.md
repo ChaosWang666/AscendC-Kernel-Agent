@@ -44,7 +44,11 @@ Stage agents 派发时传入：
   },
   "reward_raw": <float>,            // Stage 2 必填；Stage 1 直接放 ±1
   "start_point_id": <str|null>,     // Stage 2 独有
-  "context_ids": [<mem_id>, ...]    // retrieval-policy 返回的 ids
+  "context_items": [                // retrieval-policy 返回的完整 items（含 selected_by）
+    {"id": <mem_id>, "selected_by": "greedy"|"epsilon"|"seed_api", ...}, ...
+  ]
+  // 向后兼容：若 stage agent 只传 context_ids（老格式），curator 会从 bank.jsonl 反查 selected_by
+  // 但推荐传 context_items 以避免额外读盘。
 }
 ```
 
@@ -61,6 +65,24 @@ Stage agents 派发时传入：
 - 更新的 q_values 数量
 - 新追加的 memory item id
 
+## Q 更新污染防护（F4 修复）
+
+种子条目（`meta.source == "seed"`，含 14 个 api_template + 10 个 best_practice）是**静态知识旁路**，不应累积 Q 值：
+
+- 它们每次被 Stage 1 的 API 混合检索注入时,retrieval-policy 会标 `selected_by = "seed_api"`
+- 若对它们执行 Q 更新,会导致"越被用的 seed 越被后续 ε-greedy 偏爱",污染探索性
+
+**防护规则**（update_stage1 / update_stage2 均生效）:
+
+| selected_by | meta.source | type | Q 更新 | visit 更新 |
+|---|---|---|---|---|
+| `seed_api` | (任意) | (任意) | ✗ | ✓ |
+| `greedy` / `epsilon` | `seed` | `api_template`/`best_practice` | ✗ 二次防护 | ✓ |
+| `greedy` / `epsilon` | `runtime` | `trace`/`failed_trace`/`experience` | ✓ | ✓ |
+| `start_point` (仅 Stage 2) | — | — | ✓ | ✓ |
+
+visit 计数独立维护,供 retrieval-policy 的 dense 排序使用(高频被用的 seed 应排序优先,但 Q 保持不变)。
+
 ## 核心算法
 
 ### Mode 1: `update_stage1`
@@ -68,7 +90,7 @@ Stage agents 派发时传入：
 ```python
 import json, uuid, datetime
 
-def update_stage1(step, state, action, observation, reward, context_ids):
+def update_stage1(step, state, action, observation, reward, context_items):
     # 1. 追加 bank.jsonl
     new_item = {
         "id": str(uuid.uuid4()),
@@ -97,25 +119,50 @@ def update_stage1(step, state, action, observation, reward, context_ids):
         #   op_host/*.{cpp,h}, op_kernel/*.{cpp,h}, {op_name}.json, meta.json
         # cmake/ scripts/ framework/ makeself/ 按需从 source_attempt_dir 重建或共享 skeleton
 
-    # 3. MC 更新 Q_1（Eq. 3）
+    # 3. MC 更新 Q_1（Eq. 3）—— ⚠ 按 selected_by 过滤 seed_api
+    #    仅 greedy / epsilon 分支选中的 experiential items 参与 Q 学习
+    bank_index = build_bank_index()  # mem_id → entry，防止反复全文件扫描
     q = load("evo/memory/q_values.json")
     alpha = config.q_update.alpha
     q_clip = config.q_update.q_clip
-    for mid in context_ids:
+    q_updated = 0
+    visit_only_updated = 0
+    for item in context_items:
+        mid = item["id"]
         entry = q.get(mid, {"Q1": 0.0, "Q2": 0.0, "visit_1": 0, "visit_2": 0, "last_updated_t": 0})
-        entry["Q1"] = clip(entry["Q1"] + alpha * (reward - entry["Q1"]), q_clip)
+        # 始终增加访问计数（供 dense 排序 / 统计）
         entry["visit_1"] += 1
         entry["last_updated_t"] = step
+        # 旁路项（API 混合检索的 seed_api）不更新 Q，防止 seed bank 的 Q 被不断加强
+        selected_by = item.get("selected_by") or "unknown"
+        bank_entry = bank_index.get(mid)
+        is_seed_bypass = (
+            selected_by == "seed_api" or
+            (bank_entry and bank_entry.get("meta", {}).get("source") in ("seed",) and
+             bank_entry.get("type") in ("api_template", "best_practice"))
+        )
+        if is_seed_bypass:
+            visit_only_updated += 1
+        else:
+            entry["Q1"] = clip(entry["Q1"] + alpha * (reward - entry["Q1"]), q_clip)
+            q_updated += 1
         q[mid] = entry
     save("evo/memory/q_values.json", q)
 
-    return {"new_item_id": new_item.id, "q1_updated": len(context_ids)}
+    return {"new_item_id": new_item.id,
+            "q1_updated": q_updated,
+            "visit_only_updated": visit_only_updated}
 ```
 
 ### Mode 2: `update_stage2`
 
 ```python
-def update_stage2(step, state, action, observation, reward_raw, start_point_id, context_ids):
+def update_stage2(step, state, action, observation, reward_raw,
+                  start_point_id, context_items):
+    # ⚠ 输入防御（F3 + F7）
+    if start_point_id is None:
+        log_warn(f"step {step}: start_point_id missing; Stage 2 update_stage2 expects non-null")
+        # 仍然继续，但 affected_ids 只含 context_items.ids
     # 1. PopArt 归一化
     stats = load("evo/memory/stats.json")
     s2 = stats.setdefault("stage2", {"mu": 0.0, "sigma": 1.0, "n": 0,
@@ -147,20 +194,48 @@ def update_stage2(step, state, action, observation, reward_raw, start_point_id, 
                                   observation.latency_us, step, stage=2,
                                   parent_trace_id=start_point_id)
 
-    # 4. MC 更新 Q_2（对 start_point 和所有 context items）
+    # 4. MC 更新 Q_2 —— 按 selected_by 过滤 seed_api + start_point/context 去重（F7）
+    bank_index = build_bank_index()
     q = load("evo/memory/q_values.json")
     alpha = config.q_update.alpha
     q_clip = config.q_update.q_clip
-    affected_ids = [start_point_id] + context_ids
-    for mid in affected_ids:
+
+    # 构造 affected 集合：start_point + context_items；按 id 去重，
+    # 保留 start_point 的 selected_by 作为 "start_point"（永远参与 Q 更新）。
+    context_index = {item["id"]: item for item in context_items}
+    affected = []
+    if start_point_id is not None:
+        affected.append({"id": start_point_id, "selected_by": "start_point"})
+    for item in context_items:
+        if start_point_id is not None and item["id"] == start_point_id:
+            continue   # 去重：start_point 已在上面加入
+        affected.append(item)
+
+    q_updated = 0
+    visit_only_updated = 0
+    for item in affected:
+        mid = item["id"]
+        selected_by = item.get("selected_by") or "unknown"
         entry = q.get(mid, {"Q1": 0.0, "Q2": 0.0, "visit_1": 0, "visit_2": 0, "last_updated_t": 0})
-        entry["Q2"] = clip(entry["Q2"] + alpha * (reward_norm - entry["Q2"]), q_clip)
         entry["visit_2"] += 1
         entry["last_updated_t"] = step
+        bank_entry = bank_index.get(mid)
+        is_seed_bypass = (
+            selected_by == "seed_api" or
+            (bank_entry and bank_entry.get("meta", {}).get("source") in ("seed",) and
+             bank_entry.get("type") in ("api_template", "best_practice"))
+        )
+        if is_seed_bypass:
+            visit_only_updated += 1
+        else:
+            entry["Q2"] = clip(entry["Q2"] + alpha * (reward_norm - entry["Q2"]), q_clip)
+            q_updated += 1
         q[mid] = entry
     save("evo/memory/q_values.json", q)
 
-    return {"new_item_id": new_item.id, "q2_updated": len(affected_ids),
+    return {"new_item_id": new_item.id,
+            "q2_updated": q_updated,
+            "visit_only_updated": visit_only_updated,
             "reward_norm": reward_norm,
             "popart_mu": mu_new, "popart_sigma": sigma_new}
 ```
@@ -238,7 +313,8 @@ details:
   mode: update_stage1 | update_stage2 | bootstrap_seed
   step: <int>
   new_item_id: <uuid>
-  q_updated_count: <int>
+  q_updated_count: <int>                       # 实际更新 Q 的 items 数（已过滤 seed_api）
+  visit_only_updated: <int>                    # 仅 visit+1 但 Q 不变的 seed/api 数（F4 诊断）
   reward_raw: <float>
   reward_norm: <float>                         # Stage 2
   popart_mu: <float>                           # Stage 2

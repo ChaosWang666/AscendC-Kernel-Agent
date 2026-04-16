@@ -48,7 +48,7 @@ permission:
       "content": "...",        // 实际文本，供 Developer prompt 注入
       "meta": {...},
       "Q_k": 0.42,             // 当前 Q 值，用于 debug
-      "selected_by": "greedy" | "epsilon"   // 追溯用
+      "selected_by": "greedy" | "epsilon" | "seed_api"   // 追溯用；seed_api 旁路项不参与 Q 更新
     },
     ...
   ],
@@ -142,11 +142,14 @@ if subtask == "retrieve_context" and stage == 1:
     api_items += load_seed_api_bundle("ascend_c")
     # 2. 精确符号查找：从 context_trace 里提取 API 调用名，去 bank 里反查 API 模板
     # 3. 类别/语义搜索：ascendc-docs-search skill
+    # ⚠ 每个 api_item 必须打上 selected_by="seed_api" 标记（供下游 memory-curator 识别旁路项）
+    for item in api_items:
+        item["selected_by"] = "seed_api"
     # 把 api_items 单独插在 context 头部，不计入 Q 更新
     return {"context_items": [...experiential...] + api_items}
 ```
 
-`experiential` 部分走正常 Q_1 过滤；`api_items` 是旁路，memory-curator 在 Q 更新时 **不触及 api_items 的 Q 值**。
+`experiential` 部分走正常 Q_1 过滤（selected_by ∈ {greedy, epsilon}）；`api_items` 是旁路（selected_by = "seed_api"），memory-curator 在 Q 更新时 **必须按 selected_by 过滤 seed_api**，否则会污染 Q 表（参见 memory-curator AGENT.md "Q 更新污染防护"节）。
 
 ## 约束
 
@@ -154,6 +157,7 @@ if subtask == "retrieve_context" and stage == 1:
 - 输出通过 YAML trailer 返回（不在 evo/ 下留持久文件）
 - 不派发下游 agent（纯函数式）
 - 若 pool 不足（bank 太小，stage 1 早期），按实有返回（允许 $|c_t| < N$）
+- **LLM 驱动执行**：上方算法伪代码仅作语义参考；真实执行时由 agent 通过 `Read` 读 `bank.jsonl` / `q_values.json`，用逻辑判断完成 tag overlap 打分、ε-greedy 抽样、top-N 选择。**严禁通过临时 Python 脚本代替 agent 派发**（违反 LLM-驱动设计）。
 
 ## YAML trailer
 

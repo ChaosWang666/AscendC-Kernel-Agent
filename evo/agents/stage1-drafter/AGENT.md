@@ -95,7 +95,8 @@ for t in range(state.iter, state.iter + budget):
         action: {type: "trace", kernel_path: attempt_dir, feasible: g_feas},
         observation: o_t,
         reward: r,
-        context_ids: [m.id for m in c_t]
+        context_items: c_t   # 完整 items 含 selected_by（seed_api/greedy/epsilon）
+                             # curator 按 selected_by 过滤 seed_api 不更 Q_1
     })
 
     # Step 6: 写 trajectory + state
