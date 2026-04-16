@@ -17,8 +17,8 @@
 
 | 角色 | 路径 | 在 EVO 中的用法 |
 |------|------|----------------|
-| Developer（$G_\theta$）| `evo/agents/developer/AGENT.md` | 由 stage agents 派发；prompt 注入 `retrieval_context` 和（Stage 2）`start_point`。EVO 分支剥离 AVO 时已从 `agents/developer/` 内聚到此处。 |
-| Reviewer（anti-hack auditor）| `evo/agents/reviewer/AGENT.md` | 由 `multigate-verifier` 在 model-based anti-hack 阶段派发（`prompt_mode: anti_hack_audit`）。同上，原 AVO 角色已内聚。 |
+| Developer（$G_\theta$）| `evo/agents/developer/AGENT.md` | 由 stage agents 派发；prompt 注入 `retrieval_context` 和（Stage 2）`start_point` |
+| Reviewer（anti-hack auditor）| `evo/agents/reviewer/AGENT.md` | 由 `multigate-verifier` 在 model-based anti-hack 阶段派发（`prompt_mode: anti_hack_audit`） |
 
 **EVO 未使用的 AVO 角色**（仅在 `main` 分支）：Architect / Supervisor / Reporter / Tester —— 其职责被 EVO 结构（stage agents + Q 值机制 + multigate-verifier）替代。
 

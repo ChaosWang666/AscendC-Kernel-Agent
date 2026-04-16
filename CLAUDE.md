@@ -255,7 +255,7 @@ python3 scoring/test_performance.py \
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 bash scoring/score.sh workspace/runs/{op_name}/attempts/step_0 scoring/configs/{op_name}.json
 # 退出码契约（scoring/score.sh 头部也有说明）：
-#   0=完整成功, 1=environment, 2=compile, 3=deploy, 4=pybind, 5=correctness
+#   0=完整成功, 1=environment, 2=compile, 3=deploy, 4=pybind, 5=correctness, 6=performance
 # 无论成功失败都会写 evolution/scores/v{N}.json，failure_type 字段反映失败阶段
 # v{N}.json 还包含 phase_timings（每阶段 wall-clock 秒数）和持久化日志（evolution/logs/step_{N}/*.log）
 ```
@@ -306,22 +306,7 @@ scoring config JSON 支持四档测试级别（由快到慢）：
 
 ## EVO 进化流程
 
-```
-campaign-orchestrator（外循环，消费 operator_queue）:
-  for op ∈ operator_queue:
-    创建 evo/state/episodes/{op}/
-    ├─► stage1-drafter（Drafting，first_feasible 即退出）
-    │     ├─► retrieval-policy（μ 取 N=10 context）
-    │     ├─► Agent(developer, x, c_t)              [G_θ 生成]
-    │     ├─► multigate-verifier                    [V：四元组]
-    │     └─► memory-curator                        [Q_1 MC 更新]
-    │
-    └─► stage2-refiner（Refining，耗尽剩余预算）
-          ├─► retrieval-policy（选 start_point + refinement ctx）
-          ├─► Agent(developer, x, p_t, c_t)
-          ├─► multigate-verifier
-          └─► memory-curator                        [Q_2 + PopArt]
-```
+流程图：`evo/agents/AGENTS.md §工作流图`。算法细节：`evo/docs/{stage1-drafting,stage2-refining,multi-gate-verification,q-value-update}.md`。
 
 状态与记忆：
 - `evo/state/campaign.json`：全局队列 + 当前 op + stage
@@ -331,5 +316,3 @@ campaign-orchestrator（外循环，消费 operator_queue）:
 - `evo/memory/stats.json`：PopArt (μ_2, σ_2, n)
 
 评分函数：`scoring/score.sh workspace/runs/{op_name}/attempts/step_{N} scoring/configs/{op_name}.json` → 写入 `evolution/scores/v{N}.json`（`evolution/` 由 score.sh 运行时 `mkdir -p`）。
-
-完整细节：`evo/docs/{stage1-drafting,stage2-refining,multi-gate-verification,q-value-update}.md`。

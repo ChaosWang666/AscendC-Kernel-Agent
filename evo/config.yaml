@@ -4,7 +4,6 @@
 # operator_queue / per_op_budget / scoring_config 等字段与 main 分支 AVO 的
 # evolution/config.yaml 同构（便于复用 scoring/score.sh）；EVO 在此基础上新增
 # retrieval / q_update / reward_stage2 / anti_hack 等 M-MDP 专属字段。
-# evolution/ 目录由 scoring/score.sh 在运行时按需 mkdir，仓内不保留该目录。
 
 # ========== 运行模式 ==========
 mode: multi_op_stream              # 论文原设定（跨算子 campaign）

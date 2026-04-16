@@ -112,8 +112,6 @@ claude
 - `supervisor`：被 Q 值机制取代
 - `reporter` / `tester`：EVO 用 `multigate-verifier` + 显式 Q 值记录代替
 
-注：`evo/agents/developer/` 和 `evo/agents/reviewer/` 曾复用 `agents/developer|reviewer`，EVO 分支剥离 AVO 后已内聚到 `evo/agents/` 下。
-
 ## 当前状态
 
 - **阶段**：架构已搭，**未跑端到端**
