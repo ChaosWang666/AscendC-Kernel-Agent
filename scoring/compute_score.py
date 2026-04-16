@@ -227,6 +227,12 @@ def main():
                 config["performance_primary"] = pc.get("performance_primary", 0.0)
                 config["task_duration_us"] = pc.get("task_duration_us", 0.0)
                 config["profiling"] = pc.get("profiling", {})
+                # R9 fix: propagate measurement-quality fields for downstream diagnosis.
+                # test_performance.py computes these but they were dropped here.
+                for key in ("median_ms", "mean_ms", "std_ms", "cv",
+                            "min_ms", "max_ms", "num_trials"):
+                    if key in pc:
+                        config[key] = pc[key]
                 if config["performance_primary"] > 0:
                     primary_values.append(config["performance_primary"])
 

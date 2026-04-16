@@ -308,11 +308,17 @@ scoring config JSON 支持四档测试级别（由快到慢）：
 
 流程图：`evo/agents/AGENTS.md §工作流图`。算法细节：`evo/docs/{stage1-drafting,stage2-refining,multi-gate-verification,q-value-update}.md`。
 
+**历次验证**:
+- 2026-04-15 smoke test:仅 Stage 1 单步 + 复用 AVO v14 kernel(`evo/docs/smoke-test-report.md`)
+- **2026-04-16 e2e test**:完整 8 步(Stage 1 两步 + Stage 2 六步)真实 Developer 派发 + F-NEW-1 修复验证,best 34.88 μs 超 AVO v14 baseline 8.4%(`evo/docs/e2e-test-report.md`)
+
 状态与记忆：
 - `evo/state/campaign.json`：全局队列 + 当前 op + stage
 - `evo/state/episodes/{op}/`：per-op state.json + trajectory.jsonl
 - `evo/memory/bank.jsonl`：跨算子共享 memory（追加式）
-- `evo/memory/q_values.json`：Q_1 / Q_2 + visit count
+- `evo/memory/q_values.json`：Q_1 / Q_2 + visit count(Q_2 对新 P(x) 成员用创建步 `r_norm` bootstrap,防 R7 冷启动 anomaly)
 - `evo/memory/stats.json`：PopArt (μ_2, σ_2, n)
 
-评分函数：`scoring/score.sh workspace/runs/{op_name}/attempts/step_{N} scoring/configs/{op_name}.json` → 写入 `evolution/scores/v{N}.json`（`evolution/` 由 score.sh 运行时 `mkdir -p`）。
+评分函数：`EVO_STEP={t} bash scoring/score.sh workspace/runs/{op_name}/attempts/step_{N} scoring/configs/{op_name}.json` → 写入 `evolution/scores/step_{t}.json`(EVO 模式;若未传 `EVO_STEP` 则回退到 AVO 的 `v{N}.json` 递增命名)。性能聚合用 **median**(test_performance.py),score json 附带 `cv=std/mean` 供测量质量诊断。
+
+**agent 派发约束**(CP-1 R2):Claude Code harness 下 subagent 不能再 `Agent()` 派发。stage1-drafter / stage2-refiner 作为 subagent 时**必须 inline role-play** retrieval-policy / Developer / multigate-verifier / memory-curator 四角色,遵循各自 AGENT.md 的输入/输出/trailer 契约;`anti_hack_log.jsonl` 的 inline 审计用 `reason: "inline audit by ..."` 标记。见 `evo/agents/AGENTS.md §派发方式` 的"subagent 嵌套约束"。
