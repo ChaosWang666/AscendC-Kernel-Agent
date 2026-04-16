@@ -169,9 +169,23 @@ extern "C" __global__ __aicore__ void {op_name}_custom(GM_ADDR ..., GM_ADDR work
 
 1. **执行 Step 0（强制，可短路）** — 如果 DESIGN.md 的"知识检索结果"与上一轮完全相同（无新参考），可跳过文件读取，直接复用上轮参考笔记；否则关注"尚未采用的优化模式"
 2. 读取 DESIGN.md（新版优化方向）
-3. 对比 `best/` 基线与新设计的差异
-4. 增量修改候选目录中的文件
-5. 编译并确认无错误
+3. **Step 0.5:Change Isolation Strategy(Item 3/P6 必选)** — 在写代码前,先在 DESIGN.md 新建一节 `## 优化假设与改动点`,列出:
+   - **本步拟改动的代码点**(最多 2 处;若确需 >2 处,必须明写"为什么不拆两步")
+   - **每处的预期延迟改善**(定量 % 或定性 "明显加速 / 小幅改善 / 风险探索")
+   - 若某处是"回滚 / 反向尝试某历史失败"(如"撤销 step_3 的 aliased-buffer 重写"),必须在项后加 `[reversal]` 标签
+   - **⚠ 硬规则**:禁止一次性改动 ≥ 3 个独立技术点(例如 Horner 重写 + buffer aliasing + ILP 重排三合一)。TD reward 无法归因到单个技术点会污染 Q 学习信号(CP-2 step 3 实证:三合一 +38% 回归,根因无法定位)。组合必要时拆两步做。
+4. 对比 `best/` 基线与新设计的差异
+5. 增量修改候选目录中的文件,严格按 Step 0.5 列表执行
+6. 编译并确认无错误
+7. **trailer.details 必须返回 `optimization_hypothesis`**(string array),对应 Step 0.5 列出的每个改动点 — 供 stage2-refiner 写入 trajectory.jsonl 的 `a.optimization_hypothesis` 字段,方便后续 retrieval 回溯"什么假设被验证 / 被证伪"
+
+**示例 optimization_hypothesis**:
+```yaml
+optimization_hypothesis:
+  - "UB_TILE_BYTES 8K -> 16K: reduce tile-switch overhead (~5% expected)"
+  - "BUFFER_NUM 2 -> 4: deeper pipeline (~2% expected, risk: UB pressure)"
+```
+(2 项,第 2 项标 "risk" — 说明 Developer 对风险有意识,不是盲改)
 
 ### 模式 C：回归修复
 

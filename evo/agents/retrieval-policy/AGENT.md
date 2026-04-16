@@ -131,25 +131,67 @@ Tag 来源：
 - 算子 tag：从 `workspace/specs/{op}.md` 的 "算子分类" 字段 + `op.level`
 - memory item tag：入库时由 memory-curator 标注（可由 Reviewer / Developer 推断）
 
-## API 混合检索（论文 §3.2 末段）
+## API 混合检索（论文 §3.2 末段 + Item 2/P6 配额衰减）
 
-Drafting 阶段的 API 知识检索 **不走 Q 值**：
+Drafting 阶段的 API 知识检索 **不走 Q 值**,且 **配额随 step 递减**(Item 2/P6):早期冷启动 bank 里 trace 稀少,多给 API 知识;进深后让 experiential traces 接管 context,避免 seed 长期占满 10 槽导致 Q 学习信号太稀。
 
 ```
 if subtask == "retrieve_context" and stage == 1:
-    api_items = []
-    # 1. 静态 bundle：evo/memory/seed/api_templates/INDEX.md 里 backend=ascend_c 的全部
-    api_items += load_seed_api_bundle("ascend_c")
-    # 2. 精确符号查找：从 context_trace 里提取 API 调用名，去 bank 里反查 API 模板
-    # 3. 类别/语义搜索：ascendc-docs-search skill
-    # ⚠ 每个 api_item 必须打上 selected_by="seed_api" 标记（供下游 memory-curator 识别旁路项）
+    # Step A: 查 seed_api 配额
+    max_seed = resolve_seed_quota(config.retrieval.seed_api_quota_schedule, t=state.iter)
+    # e.g. t=0 → 9;t=10 → 7;t=20 → 5;t=27 → 3
+
+    # Step B: 拉 API 知识候选池(无限池,下面会截断)
+    api_pool = []
+    api_pool += load_seed_api_bundle("ascend_c")       # evo/memory/seed/api_templates/INDEX.md
+    api_pool += symbol_lookup(context_trace)           # 精确符号反查
+    api_pool += ascendc_docs_search(x.tags)            # 语义搜索(可选)
+
+    # Step C: 配额截断,按 tag_overlap 排序取前 max_seed 个
+    api_pool = sorted(api_pool, key=lambda m: -tag_overlap(x.tags, m.meta.tags))
+    api_items = api_pool[:max_seed]
     for item in api_items:
-        item["selected_by"] = "seed_api"
-    # 把 api_items 单独插在 context 头部，不计入 Q 更新
-    return {"context_items": [...experiential...] + api_items}
+        item["selected_by"] = "seed_api"               # F4 旁路标记
+
+    # Step D: experiential 部分走正常 Q_1 filter,填满剩余 slot
+    experiential_slots = N - len(api_items)            # e.g. N=10, api=9 → experiential=1
+    if experiential_slots > 0:
+        experiential = select_by_epsilon_greedy(
+            bank, Q_1, epsilon=ε_t, N=experiential_slots, pool_K=K
+        )
+        # 每条 experiential.selected_by ∈ {"greedy","epsilon"}
+    else:
+        experiential = []
+
+    # Step E: seed 不足时(冷启动早期 api_pool < max_seed)允许 |c_t| < N
+    return {"context_items": api_items + experiential,  # api 头,experiential 尾
+            "seed_count": len(api_items),
+            "experiential_count": len(experiential)}
 ```
 
-`experiential` 部分走正常 Q_1 过滤（selected_by ∈ {greedy, epsilon}）；`api_items` 是旁路（selected_by = "seed_api"），memory-curator 在 Q 更新时 **必须按 selected_by 过滤 seed_api**，否则会污染 Q 表（参见 memory-curator AGENT.md "Q 更新污染防护"节）。
+### 配额解析 `resolve_seed_quota`
+
+```python
+def resolve_seed_quota(schedule, t):
+    # schedule 是 list of {steps: [start, end], max_seed_items: int}
+    # 取第一个区间 [s, e] 满足 s <= t <= e 的配额;若无匹配则取最后一段
+    for seg in schedule:
+        s, e = seg["steps"]
+        if s <= t <= e:
+            return seg["max_seed_items"]
+    return schedule[-1]["max_seed_items"]
+```
+
+### 实际效果(假设 N=10,默认 schedule)
+
+| step t | max_seed | experiential_slots |
+|---|---|---|
+| 0-5 | 9 | 1 |
+| 6-15 | 7 | 3 |
+| 16-25 | 5 | 5 |
+| 26+ | 3 | 7 |
+
+`experiential` 部分走正常 Q_1 过滤(selected_by ∈ {greedy, epsilon});`api_items` 是旁路(selected_by = "seed_api"),memory-curator 在 Q 更新时 **必须按 selected_by 过滤 seed_api**,否则会污染 Q 表(参见 memory-curator AGENT.md "Q 更新污染防护"节)。
 
 ## 约束
 

@@ -47,10 +47,24 @@ permission:
 
 ```
 读 config.yaml + state.json + P(x) = [initial_start_point]
-b = state.b_t   # 初始为 Stage 1 出口 latency
+b = state.b_t   # 初始为 Stage 1 出口 latency(median canonical, Item 1/P6)
 
 for t in range(state.iter, state.iter + budget):
-    ε_t = linear_decay(ε_0, ε_end, t, decay_steps)
+    # Item 5/P6 — ε schedule 延缓 + consecutive-failure burst
+    # 1) 基线线性衰减(decay_steps 默认 25,比原 20 慢):
+    base_ε = linear_decay(ε_0, ε_end, t, decay_steps)
+    # 2) 若连续 ≥threshold 步回归 且 cooldown 已过:burst 重置 ε
+    burst_cfg = config.retrieval.epsilon_burst
+    burst_just_triggered = False
+    if (burst_cfg.enabled
+        and state.get("consecutive_failure_count", 0) >= burst_cfg.threshold
+        and (t - state.get("last_epsilon_burst_at_step", -999)) >= burst_cfg.cooldown_steps):
+        ε_t = max(base_ε, burst_cfg.reset_to)
+        state["last_epsilon_burst_at_step"] = t
+        burst_just_triggered = True
+        log_info(f"step {t}: ε-burst triggered (consec_fail={state.consecutive_failure_count}) → ε={ε_t}")
+    else:
+        ε_t = base_ε
 
     # Step 1: 选 start_point
     派发 Agent(retrieval-policy, {
@@ -85,8 +99,15 @@ for t in range(state.iter, state.iter + budget):
         start_point_latency: p_t.latency_us,
         retrieval_context: c_t,              # 优化经验
         stage: "refining",
-        profiling_hint: p_t.bottleneck_diagnosis  # 若有（§3.4 末段）
+        profiling_hint: p_t.bottleneck_diagnosis,  # 若有（§3.4 末段）
+        minimal_change_required: true        # Item 3/P6: 强制遵守 Step 0.5 Change Isolation
+                                              # Developer 必须在 DESIGN.md 列出 ≤ 2 个改动点
+                                              # trailer.details.optimization_hypothesis 必填
     })
+    # 从 Developer trailer 读 optimization_hypothesis(P6 新增);为 null 记录 warning
+    hypothesis = developer_trailer.details.get("optimization_hypothesis") or []
+    if not hypothesis and mode == "optimize":
+        log_warn(f"step {t}: Developer 未返回 optimization_hypothesis(违反 Item 3/P6 minimal-change discipline)")
 
     # Step 4: V 验证
     派发 Agent(multigate-verifier, ...) → o_t = {g_hack, g_comp, g_corr, latency_us}
@@ -124,10 +145,35 @@ for t in range(state.iter, state.iter + budget):
 
     # Step 7: 写 trajectory + state
     append to trajectory.jsonl:
-        {t, stage: 2, s: snapshot, a: attempt_dir, p: p_t.id, o: o_t, r_raw, r_norm, c_ids: ...}
+        {
+          t, stage: 2,
+          s: snapshot,
+          a: {
+            attempt_dir,
+            kernel_path,
+            mode: "optimize",
+            optimization_hypothesis: hypothesis    # Item 3/P6 — Developer minimal-change 列出的假设
+          },
+          p: p_t.id,
+          o: { ...o_t, _measure_type: o_t.latency_measure_type or "median" },  # Item 1/P6
+          r_raw, r_norm, c_ids, c_selected_by,
+          epsilon_used: ε_t, epsilon_burst_active: burst_just_triggered,        # Item 5/P6
+          start_point_id: p_t.id,
+          q_updated_count, visit_only_updated,
+          new_item_id, start_point_added,
+          timestamp: utcnow()
+        }
     state.iter = t + 1
-    state.b_t = b
+    state.b_t = b                                 # median canonical (Item 1/P6)
+    state.b_t_measure_type = "median"
+    state.b_t_cv = o_t.latency_cv                  # 追踪当前 b_t 的测量质量
     state.budget_remaining = (state.iter_end) - (t + 1)
+
+    # Item 5/P6 — consecutive_failure_count 维护
+    if g_feas == 1 and o_t.latency_us < previous_b_t:
+        state.consecutive_failure_count = 0
+    else:
+        state.consecutive_failure_count = (state.get("consecutive_failure_count", 0) or 0) + 1
 
 return {status: success, best_latency_us: b, P_x_size: |P(x)|, steps_used: budget}
 ```

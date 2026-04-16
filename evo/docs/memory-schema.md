@@ -37,6 +37,8 @@ evo/memory/
     "kernel_path": "workspace/runs/gelu_custom/attempts/step_3/GeluCustom",
     "feasible": true,
     "latency_us": 35.64,
+    "latency_measure_type": "median",              // Item 1/P6: 默认 median;旧数据可能含 "mean_legacy"
+    "latency_cv": 0.08,                            // 测量 coefficient of variation
     "parent_trace_id": "<uuid of parent or null>",
     "reason": "compile_error | correctness_mismatch | ...",
     "token_count": 412
@@ -219,6 +221,83 @@ retrieval 先按 tag 求并集得候选，再精算 overlap——从 O(n) 降到
 - **Append-only bank**：`echo '{...}' >> bank.jsonl` 单行原子（系统保证）
 - **RMW 文件**（q_values.json / stats.json）：写 `.tmp` → `mv` 原子替换
 - **不加锁**：假设 stage agents 串行派发 memory-curator；如未来并发扩展，在 memory-curator 增加 `flock`
+
+## `state.json` 与 `trajectory.jsonl`(episode 状态)
+
+位于 `evo/state/episodes/{op_name}/`,由 stage agents 写入。
+
+### `state.json` schema(Item 1/P6 + Item 5 扩展后)
+
+```json
+{
+  "op_name": "gelu_custom",
+  "stage": "drafting | refining | stage1_failed",
+  "iter": 8,
+  "feasible_found": true,
+  "b_t": 37.86,                         // best latency observed so far (us)
+  "b_t_measure_type": "median",         // Item 1/P6: 必填;历史数据可为 "mean_legacy"
+  "b_t_cv": 0.084,                      // 该测量的 cv;null 表示未记录
+  "b_t_retrofit_note": "<str|null>",   // 可选:数据迁移时的溯源说明
+  "budget_remaining": 22,
+  "stage1_steps_used": 2,
+  "P_x_size": 7,
+  "initial_feasible_at_step": 1,
+  "last_failure_reason": "<str|null>",
+  "consecutive_failure_count": 0,       // Item 5: ε-burst trigger 计数
+  "last_epsilon_burst_at_step": -1,     // Item 5: 上次 burst 的 step(-1 表示从未)
+  "updated_at": "2026-04-16T08:23:23Z"
+}
+```
+
+**b_t 语义**:必须 median-canonical,从 `score_{t}.json.performance_primary` 取(自 R9+R12 起该字段即 median*1000)。每步 Stage 2 若 `latency < b_t` 则更新;`_measure_type="mean_legacy"` 的 b_t 不能直接用于 tanh reward(需先重测或迁移)。
+
+**consecutive_failure_count 更新规则**(Item 5 / ε-burst):
+- 每步末,若 g_feas=1 且 latency < b_t:`reset to 0`
+- 否则:`+= 1`
+- 当 `>= config.retrieval.epsilon_burst.threshold` 且 `(iter - last_epsilon_burst_at_step) >= cooldown_steps`:下一步 ε 重置到 `epsilon_burst.reset_to`,并更新 `last_epsilon_burst_at_step = iter`
+
+### `trajectory.jsonl` schema(逐行 JSON)
+
+```json
+{
+  "t": 2,
+  "stage": 2,
+  "s": { "iter": 2, "budget_remaining": 28, "feasible_found": true },
+  "a": {
+    "kernel_path": "workspace/runs/gelu_custom/attempts/step_2/GeluCustom",
+    "attempt_dir": "workspace/runs/gelu_custom/attempts/step_2",
+    "mode": "optimize",
+    "optimization_hypothesis": [          // Item 3/P6: Developer Minimal-Change 列出的假设
+      "UB_TILE_BYTES 8K->16K reduces tile-switch overhead (~5%)"
+    ]
+  },
+  "o": {
+    "g_hack": 1, "g_comp": 1, "g_corr": 1,
+    "latency_us": 34.88,
+    "_measure_type": "median",            // Item 1/P6: 必填;历史可为 "mean_legacy"
+    "latency_cv": 0.084,                  // 可选
+    "reason": null,
+    "exit_code": 0,
+    "g_feas": 1
+  },
+  "r": 1,                                 // Stage 1 reward (±1) 或 Stage 2 r_raw
+  "r_norm": 0.0476,                       // Stage 2 only: PopArt-normalized reward
+  "c_ids": ["mem-uuid-1", "mem-uuid-2"],
+  "c_selected_by": ["greedy", "seed_api"],
+  "start_point_id": "<uuid|null>",        // Stage 2 only
+  "q_updated_count": 2,                   // memory-curator 实际更新 Q 的 items 数
+  "visit_only_updated": 8,                // 仅 visit+1 的 seed items 数(F4 诊断)
+  "epsilon_used": 0.275,
+  "epsilon_burst_active": false,          // Item 5: 本步 ε 是否由 burst 机制提升
+  "new_item_id": "<uuid>",
+  "start_point_added": true,
+  "timestamp": "2026-04-16T08:12:00Z"
+}
+```
+
+**增长**:每步末追加一行,永不删除。
+
+---
 
 ## 可读性 / 调试
 

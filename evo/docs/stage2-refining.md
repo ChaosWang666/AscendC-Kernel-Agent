@@ -99,6 +99,24 @@ $$p_t = \begin{cases} \text{Uniform}(P(x)), & \text{w.p. } \varepsilon_t \\ \arg
 
 **$|P(x)|$ 增长**：每步若 $g_{\text{feas}}=1$ 则 $|P(x)| \mathrel{{+}{=}} 1$。论文观察：每个算子平均 3–8 个 feasible 变体入池。
 
+### ε schedule(Item 5/P6 延缓 + burst)
+
+**基线衰减**:线性从 `epsilon_start=0.3` → `epsilon_end=0.05`,`decay_steps=25`(P6 从 20 延长到 25,原因:30 步预算下 t>20 后 ε 过早触底,exploration 窗口缩小)。
+
+**burst 机制**:当 `state.consecutive_failure_count >= threshold`(默认 3)且 `t - last_burst >= cooldown_steps`(默认 5)时,**强制把 ε 重置到 reset_to=0.20**:
+
+```
+ε_t = max(base_ε, burst.reset_to) if burst_triggered else base_ε
+```
+
+触发后更新 `state.last_epsilon_burst_at_step = t`,cooldown 期内不再触发(避免 thrashing)。
+
+**consecutive_failure_count 更新规则**(每步末):
+- 若 g_feas=1 且 `o_t.latency < b_t`:`count = 0`(打破连败)
+- 否则:`count += 1`
+
+**动机**:CP-2 实测 step 3/4/5 连续三步回归(48.20→46.14→38.68),但 ε 按线性降仍在 0.25 附近,greedy 仍主导,导致陷在 start_point 428d9a30 或 fee1a639。burst 机制在检测到连败时重启探索,跳出局部困局。
+
 ## Refinement Context 检索
 
 与 Stage 1 检索类似，但：
@@ -138,15 +156,16 @@ $$p_t = \begin{cases} \text{Uniform}(P(x)), & \text{w.p. } \varepsilon_t \\ \arg
 【约束】
 - 以 start point 为 baseline 改写（cp -r {p_t.kernel_path}/GeluCustom {attempt_dir}/）
 - 仅允许一个聚焦方向（AVO 共识：增量进化）
+- **Item 3/P6 Minimal-Change Discipline**(Developer AGENT.md Step 0.5):本次改动**最多 2 处独立技术点**,禁止一次性改 ≥3 处(如 Horner 重写 + buffer aliasing + ILP 重排三合一)。组合必要时拆两步做。
 - 保持正确性：若性能提升但 correctness 退化，不接受
 
 【输出】
 - {attempt_dir}/{OpCapitalName}/ 完整工程
 - {attempt_dir}/docs/DESIGN.md 必须写明：
   * Baseline: <p_t.id> (<latency>us)
-  * 本次优化假设
+  * **## 优化假设与改动点**(P6 新增节):列出 ≤2 个改动点,每个附预期贡献估计;`[reversal]` 标签标出"回滚性尝试"
   * Context 中引用的 item ids 及其贡献
-- YAML trailer
+- YAML trailer 的 `details.optimization_hypothesis`(string array)必填,对应 DESIGN.md 列出的改动点 — stage2-refiner 会写入 trajectory.jsonl 的 `a.optimization_hypothesis` 字段
 ```
 
 ## 性能预期

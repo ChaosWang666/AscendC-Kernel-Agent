@@ -160,16 +160,20 @@ $$\varepsilon_t = \max\bigl(\varepsilon_{\text{end}},\ \varepsilon_0 - \frac{t}{
 - Stage 1 早期探索很重要（memory 刚启动，Q 值信号弱）
 - Stage 2 接近预算末端倾向利用（pure greedy）
 
-## API 混合检索细节（论文 §3.2 末段）
+## API 混合检索细节（论文 §3.2 末段 + Item 2/P6 配额衰减）
 
 **动机**：API 知识的价值主要取决于 *backend 覆盖度*（这个 op 是否有对应 API），而不是 *历史效用*——所以 API 不该被 Q 值主导。
 
 **实现**：
-1. **静态 bundle**：`evo/memory/seed/api_templates/INDEX.md` 分类列出 Ascend C 的核心 API（DataCopy、EnQue/DeQue、Compute 类等）。Drafting 默认全部注入。
-2. **精确符号查找**：
-   - 从 dense top-K 里的 trace 条目（type=trace）抽 kernel 代码里调用的 API 名（正则扫 `::`、`AscendC::*` 等）
+1. **静态 bundle**:`evo/memory/seed/api_templates/INDEX.md` 分类列出 Ascend C 的核心 API(DataCopy、EnQue/DeQue、Compute 类等)。Drafting 按 **配额截断**(见下)后注入。
+2. **精确符号查找**:
+   - 从 dense top-K 里的 trace 条目(type=trace)抽 kernel 代码里调用的 API 名(正则扫 `::`、`AscendC::*` 等)
    - 反查 bank 中对应 API 的 api_template 条目
-3. **类别/语义搜索**：通过 `ascendc-docs-search` skill 直接查本地 API 文档
+3. **类别/语义搜索**:通过 `ascendc-docs-search` skill 直接查本地 API 文档
+4. **配额衰减**(P6 新增):`config.retrieval.seed_api_quota_schedule` 按 step t 区间定义 `max_seed_items`。早期 t<6 放 9 项(冷启动 bank 里 trace 稀少,需重 API 知识);中期 t=16-25 放 5 项;末期 t>25 降到 3 项,让 experiential traces 接管 context。原 rationale:CP-1 实测 step 0 的 context 10 项里 9 个是 seed_api,experiential 几乎无声,Q_1 学习信号被浪费。
+
+**配额解析函数**:见 `evo/agents/retrieval-policy/AGENT.md: resolve_seed_quota`。
+`experiential` slot 数量 = N - `len(api_items)`,剩余空间由 epsilon-greedy by Q_1 从 experiential pool(type ∈ {trace, failed_trace, experience})挑。
 
 ## 不变量
 

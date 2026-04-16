@@ -34,15 +34,39 @@ retrieval:
   lambda: 5                        # 过检倍率 → K=λN=50
   epsilon_start: 0.3               # ε-greedy 起始探索率（Drafting 早期）
   epsilon_end: 0.05                # 衰减下界
-  epsilon_decay_steps: 20          # 线性衰减步数
+  epsilon_decay_steps: 25          # 线性衰减步数 (Item 5/P6:20→25 延缓过早触底)
   dense_match:
     method: tag_overlap            # v1 简化：tag 交集；v2 可升级 embedding
     min_overlap: 1                 # 至少 1 个 tag 匹配才入 top-K
 
+  # Item 2/P6 — seed_api 配额渐进降低
+  # Stage 1 冷启动时 bank 里 trace 稀少,多给 API 知识;campaign 进深后让
+  # experiential traces 接管 context。每段 [start, end] 按 absolute step t 匹配。
+  seed_api_quota_schedule:
+    - {steps: [0, 5],   max_seed_items: 9}   # 冷启动重 API 知识(experiential pool 空)
+    - {steps: [6, 15],  max_seed_items: 7}   # 过渡阶段
+    - {steps: [16, 25], max_seed_items: 5}   # 主 experiential
+    - {steps: [26, 999], max_seed_items: 3}  # 末期几乎全 experiential
+
+  # Item 5/P6 — ε burst:连续回归时提升探索率
+  epsilon_burst:
+    enabled: true
+    trigger: consecutive_failures       # state.json.consecutive_failure_count >= threshold
+    threshold: 3                         # 连续几步 regression 触发
+    reset_to: 0.20                       # ε 重置到该值
+    cooldown_steps: 5                    # burst 后 N 步不再触发(avoid thrashing)
+
 # ========== Q 更新（Eq. 3） ==========
 q_update:
-  alpha: 0.1                       # 步长
-  q_init: 0.0                      # 新 item 初始 Q
+  # Item 4/P6 — α adaptive schedule:随 visit 递减,加速早期收敛再稳定
+  # alpha_mode=constant 时用 alpha 字段(向后兼容);
+  # alpha_mode=visit_count_adaptive 时按 formula 计算 alpha_eff。
+  alpha_mode: visit_count_adaptive
+  alpha_init: 0.3                  # visit=0 时的初值(首次观测权重最大,相当于 MC bootstrap)
+  alpha_floor: 0.05                # 收敛下界(visit 大时不降到 0,保持对漂移敏感)
+  alpha_formula: "max(alpha_floor, alpha_init / (1 + visit_k))"
+  alpha: 0.1                       # 兼容旧 mode=constant 的回退值
+  q_init: 0.0                      # 新 item 初始 Q(feasible 新条目由 R7 bootstrap 到 r_norm)
   q_clip: [-1.0, 1.0]              # 有界保证（论文 App A.2）
 
 # ========== Stage 2 奖励（Eq. 5） ==========

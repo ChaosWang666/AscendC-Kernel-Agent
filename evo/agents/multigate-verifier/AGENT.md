@@ -49,15 +49,19 @@ permission:
   "g_comp": 0 | 1,
   "g_corr": 0 | 1,
   "latency_us": <float | null>,
+  "latency_measure_type": "median",          // 默认 median(R9+R12 后 performance_primary 即 median)
+  "latency_cv": <float | null>,              // 测量 coefficient of variation,>0.15 表示噪声大
   "reason": "<human-readable fail reason if any>",
   "exit_code": <int 0-6>,
-  "score_json_path": "evolution/scores/v{N}.json",
+  "score_json_path": "evolution/scores/step_{t}.json",   // EVO_STEP 模式 (R5/R11)
   "anti_hack_details": {
       "rule_based": {...},
       "model_based": {status: "clean|violated|skipped", reason: "..."}
   }
 }
 ```
+
+**latency 口径约定(Item 1/P6)**:从 `step_{t}.json.performance_primary` 读取,**该字段自 R9 起即为 median_ms * 1000**(不是 mean)。所有下游 reward 计算(Eq.5 tanh)、state.json.b_t 演化、memory-curator 写 trace 的 `meta.latency_us`,都基于 median canonical。`latency_cv` 从 `step_{t}.json.configs[].cv` 取最大值作为本次测量的整体噪声诊断,高 cv 不阻断流程但会被写入 trace 供 retrieval/回溯参考。
 
 ## 门执行顺序（短路）
 

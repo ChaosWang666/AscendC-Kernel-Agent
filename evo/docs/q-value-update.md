@@ -59,6 +59,32 @@ $$|Q_{n+1}| = |(1-\alpha)Q_n + \alpha r| \le (1-\alpha)|Q_n| + \alpha|r| \le (1-
 - 对 tracking non-stationary target（memory 在扩张）更合适
 - 实证上 30 步内就能区分高/低价值 item（论文 §4.5 value-driven vs heuristic 的差异）
 
+## α adaptive schedule(Item 4/P6)
+
+CP-2 实测发现 6 步后 PopArt σ 几乎没变(0.986→0.971),固定 $\alpha=0.1$ 在 30 步预算下 Q 演化过慢。
+
+**P6 引入 visit-count-adaptive α**:
+
+$$
+\alpha_{\text{eff}}(v) = \max\bigl(\alpha_{\text{floor}},\ \frac{\alpha_{\text{init}}}{1 + v}\bigr)
+$$
+
+其中 $v = \text{visit\_k}$(本次更新后的 visit 计数,Stage 1 用 visit_1,Stage 2 用 visit_2)。默认 $\alpha_{\text{init}}=0.3, \alpha_{\text{floor}}=0.05$。
+
+| visit | $\alpha_{\text{eff}}$ | 语义 |
+|---|---|---|
+| 0 | 0.30 | 首次观测占 30% 权重(相当于 MC bootstrap;避免 Q=0 主宰 greedy) |
+| 1 | 0.15 | 第二次观测快速调整 |
+| 2 | 0.10 | 经典值,等价老模式 |
+| 5 | 0.05 | 触底,保持对漂移敏感 |
+| 20 | 0.05 | 触底 |
+
+**与 R7 Q_2 bootstrap 的关系**:R7 是"新 feasible 条目直接 Q_2=r_norm"(一次性赋值,不走 TD),等价 MC n=1。α adaptive 是对**已有** experiential item 的 TD 更新曲线控制。两者正交互补。
+
+**config 开关**:`q_update.alpha_mode: "visit_count_adaptive"`(默认,P6 启用)或 `"constant"`(回退旧行为,读 `alpha` 字段)。
+
+**收敛性**:$\sum \alpha_n = \alpha_{\text{init}} \sum 1/(1+n)$ 在 floor 存在时发散(√),$\sum \alpha_n^2$ 收敛(√),Robbins-Monro 条件满足(若 floor → 0)。实际 floor=0.05 不严格满足 RM,但比固定 0.1 更接近。
+
 ## PopArt 归一化（Stage 2 专属）
 
 $$\hat r_{2,t} = \frac{r_{2,t} - \mu_2}{\sigma_2}$$
