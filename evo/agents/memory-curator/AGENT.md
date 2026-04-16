@@ -83,6 +83,15 @@ Stage agents 派发时传入：
 
 visit 计数独立维护,供 retrieval-policy 的 dense 排序使用(高频被用的 seed 应排序优先,但 Q 保持不变)。
 
+### Q_2 bootstrap on creation(R7 / F-NEW-1 修复)
+
+新加入 P(x) 的 feasible 条目**必须在创建时**把 Q_2 bootstrap 为本次观测到的 `reward_norm`,而不是用 `config.q_init=0.0`:
+
+| Stage | 新条目初值 | 理由 |
+|---|---|---|
+| Stage 1 feasible 首入 P(x) | Q_2 = 0(单元素 P(x) 无竞争) | Stage 1 的 ±1 reward 不是 PopArt 归一后的值;且 Stage 2 首步强制选该唯一起点,不存在 Q 竞争问题 |
+| Stage 2 feasible 加入 P(x) | **Q_2 = reward_norm, visit_2 = 1** | 首次观测即 MC n=1 估计;否则 Q=0 > 任何已 TD 更新过的负 Q_2 条目,greedy 会优先选最新/最差条目(CP-2 step 4 实证回归到 worst-latency start_point) |
+
 ## 核心算法
 
 ### Mode 1: `update_stage1`
@@ -189,6 +198,10 @@ def update_stage2(step, state, action, observation, reward_raw,
     append_jsonl("evo/memory/bank.jsonl", new_item)
 
     # 3. 若 feasible：扩展 P(x) — partial snapshot（见 Mode 1 注释）
+    #    + Q_2 bootstrap（R7 / F-NEW-1 修复）：新 P(x) 条目的 Q_2 必须初始化为
+    #      本次观测到的 reward_norm，而不是 config.q_init=0.0。否则任何一次负奖励
+    #      会让老条目 Q_2<0、新条目 Q_2=0，ε-greedy 的 greedy 分支优先选最新的
+    #      条目——即使它是最差的 latency（CP-2 step 4 实证过）。
     if action.feasible:
         save_start_point_partial(new_item.id, state.op_name, action.kernel_path,
                                   observation.latency_us, step, stage=2,
@@ -199,6 +212,15 @@ def update_stage2(step, state, action, observation, reward_raw,
     q = load("evo/memory/q_values.json")
     alpha = config.q_update.alpha
     q_clip = config.q_update.q_clip
+
+    # ⚠ Q_2 bootstrap：feasible 新条目以本次 reward_norm 作为 Q_2 初值（MC n=1 估计）
+    #   等价于"第一次观测直接作为 Q 初值"，后续步的 TD α-blend 会在此基础上演化。
+    #   这是 CP-2 R7 / F-NEW-1 的核心修复；视觉上相当于为新条目加一次 visit_2=1。
+    if action.feasible:
+        bootstrap_entry = {"Q1": 0.0, "Q2": clip(reward_norm, q_clip),
+                           "visit_1": 0, "visit_2": 1,
+                           "last_updated_t": step}
+        q[new_item.id] = bootstrap_entry
 
     # 构造 affected 集合：start_point + context_items；按 id 去重，
     # 保留 start_point 的 selected_by 作为 "start_point"（永远参与 Q 更新）。

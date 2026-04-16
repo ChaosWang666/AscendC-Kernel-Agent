@@ -110,6 +110,7 @@ def measure_performance(ref_module, config, device, synchronize, event_class):
 
         return {
             "mean": statistics.mean(elapsed_times),
+            "median": statistics.median(elapsed_times),
             "std": statistics.stdev(elapsed_times) if len(elapsed_times) > 1 else 0.0,
             "min": min(elapsed_times),
             "max": max(elapsed_times),
@@ -214,20 +215,29 @@ def main():
         perf = measure_performance(ref_module, config, device, synchronize, event_class)
 
         # 根据 metric_type 计算 performance_primary
+        # CP-2 R9 修复:用 median 而非 mean 聚合,避免 NPU thermal/contention 导致的
+        # 单次 outlier 主导聚合值(smoke test 中单次 trials 的 max 可达 2x min)。
+        # 同时暴露 cv = std/mean 供上游判断测量质量(cv > 0.15 视为可疑)。
         if metric_type == "latency_us":
-            performance_primary = perf["mean"] * 1000  # ms → us
+            performance_primary = perf["median"] * 1000  # ms → us
         else:
-            performance_primary = perf["mean"]  # 原始值
+            performance_primary = perf["median"]  # 原始值
+
+        cv = (perf["std"] / perf["mean"]) if perf["mean"] > 0 else 0.0
+        if cv > 0.15:
+            print(f"  [{level}/{config_name}] ⚠ high variance: cv={cv:.3f} (std={perf['std']:.4f} mean={perf['mean']:.4f})")
 
         result = {
             "name": config_name,
             "level": level,
             "mean_ms": round(perf["mean"], 6),
+            "median_ms": round(perf["median"], 6),
             "std_ms": round(perf["std"], 6),
+            "cv": round(cv, 4),
             "min_ms": round(perf["min"], 6),
             "max_ms": round(perf["max"], 6),
             "num_trials": perf["num_trials"],
-            "task_duration_us": round(perf["mean"] * 1000, 3),
+            "task_duration_us": round(perf["median"] * 1000, 3),
             "performance_primary": round(performance_primary, 3),
         }
 

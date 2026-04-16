@@ -134,3 +134,33 @@ Cast(dst_fp16, tmp, RoundMode::CAST_ROUND, tileLength);
 - 若需要 fallback 到 host，走 op_host（不走 kernel）
 
 **tags**: [anti_hack, op_kernel, constraints]
+
+## 多 socVersion 注册：显式 AddConfig 覆盖本机芯片
+
+**Why**：msopgen 默认命令 `msopgen gen -c ai_core-Ascend910B ...` 只生成注册 `ascend910b` 的 op_host 模板。**但本机 Ascend910 NPU 的 socVersion 实际可能是 `ascend910_93`（A3 芯片代际，DAV_2201/DAV_3002）**,aclnn 运行时找不到匹配注册,直接报 `socVersion [ascend910_93] does not support opType [OpName]` → score.sh correctness 阶段 exit_code=5。
+
+首次 Drafting 如果遇到 `correctness: aclnnXxx unsupported on socVersion ascend910_93`,这是**环境注册不匹配**,不是算子逻辑错。
+
+**How**：op_host/{op_name}_custom.cpp 的 `OpDef` 注册段落必须显式枚举本机所有可能 socVersion:
+
+```cpp
+// op_host/{op_name}_custom.cpp — OpDef 注册尾部
+this->AICore()
+    .SetTiling(optiling::TilingFunc)
+    .AddConfig("ascend910b")
+    .AddConfig("ascend910_93");   // ← A3 芯片;漏写导致 aclnn 查不到 kernel
+```
+
+同步更新 `CMakePresets.json`:
+
+```json
+{
+  "cacheVariables": {
+    "ASCEND_COMPUTE_UNIT": { "type": "STRING", "value": "ascend910b;ascend910_93" }
+  }
+}
+```
+
+首次运行前 `npu-smi info` 确认本机 Chip Name(看 `Chip:Phy-ID` 行);或直接 AddConfig 两个都带上成本极低,建议统一默认双注册。
+
+**tags**: [msopgen, socversion, ascend910_93, op_registration, gotcha]

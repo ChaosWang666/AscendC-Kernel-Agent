@@ -160,7 +160,9 @@ g_hack=1 表示 **clean**（未发现 hack）；g_hack=0 表示 **violated**。
 
 ```bash
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
-bash scoring/score.sh {attempt_dir} {op.scoring_config}
+# ⚠ 必须传 EVO_STEP 环境变量,让 score.sh 把聚合 json 写成 step_{N}.json 而非 v0.json
+# 否则每步会覆盖上一步的评分,历史不可追溯(CP-2 R5/R11 修复)。
+EVO_STEP={current_step_t} bash scoring/score.sh {attempt_dir} {op.scoring_config}
 exit_code=$?
 ```
 
@@ -182,12 +184,13 @@ exit_code=$?
 
 ```python
 import json
-score_json = glob(f"evolution/scores/v*.json")[-1]  # 最新一版
+# EVO 默认传 EVO_STEP,score.sh 写 step_{t}.json;落盘到固定 step 文件便于历史回溯
+score_json = f"evolution/scores/step_{current_step_t}.json"
 data = json.load(open(score_json))
 latency = data.get("performance_total", None)   # us，latency_us
 ```
 
-注意：`scoring/score.sh` 每次会写 `evolution/scores/v{N}.json`，但 EVO 有自己的 trajectory 记录——这两者并存，score.json 仍作为 latency source of truth。
+注意：`scoring/score.sh` 原生路径是 `evolution/scores/v{N}.json`(AVO legacy);EVO 传 `EVO_STEP` 环境变量后改为 `step_{N}.json` 一一对应 trajectory.jsonl 的 `t`,历史可追溯。
 
 ## 短路逻辑
 

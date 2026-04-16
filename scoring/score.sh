@@ -88,12 +88,21 @@ else:
 " 2>/dev/null || echo "0.0")
 
 # 输出路径
+# EVO_STEP 环境变量优先:EVO 的 stage agent 按 t=0,1,2,...递增传入,
+# 每步独立写 step_{N}.json,避免 v0.json 被每次调用覆盖(CP-2 R5/R11 修复)。
+# 未设置时回退到 AVO legacy 的 v{VERSION}.json 行为(evolution/state.json 递增)。
 SCORES_DIR="$PROJECT_ROOT/evolution/scores"
 mkdir -p "$SCORES_DIR"
-SCORE_JSON="$SCORES_DIR/v${VERSION}.json"
+if [[ -n "${EVO_STEP:-}" ]]; then
+    SCORE_JSON="$SCORES_DIR/step_${EVO_STEP}.json"
+    LOG_SUBDIR="step_${EVO_STEP}"
+else
+    SCORE_JSON="$SCORES_DIR/v${VERSION}.json"
+    LOG_SUBDIR="step_${VERSION}"
+fi
 
-# 持久化日志目录（按 version 分组，不随 trap 清理消失）
-LOG_DIR="$PROJECT_ROOT/evolution/logs/step_${VERSION}"
+# 持久化日志目录（按 version / EVO_STEP 分组，不随 trap 清理消失）
+LOG_DIR="$PROJECT_ROOT/evolution/logs/$LOG_SUBDIR"
 mkdir -p "$LOG_DIR"
 
 # 临时 JSON 中间结果（短生命周期，不需要留）

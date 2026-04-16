@@ -61,6 +61,22 @@ Agent(
 )
 ```
 
+### ⚠ subagent 嵌套约束(CP-1 R2 实测确认)
+
+Claude Code harness 下,**通过 `Agent()` 派发出的 subagent 自身 没有 `Agent` 工具**(安全/成本/递归控制),因此无法进一步派发子 subagent。这意味着:
+
+- **top-level Claude** 可以 `Agent()` 派发 campaign-orchestrator 或 stage agents(✅)
+- **stage1-drafter / stage2-refiner 作为 subagent 无法** 再次 `Agent()` 派发 retrieval-policy / Developer / multigate-verifier / memory-curator
+- 实际行为:stage agents **在同一 subagent 会话内顺序扮演**(inline role-play)这 4 个子角色的职责
+
+**契约声明**:
+- Inline role-play 必须**严格遵循**被扮演子 agent 的 AGENT.md 行为规范(输入、输出 YAML trailer、文件读写边界)
+- 所有 memory 写入仍必须**通过 role-play 的 memory-curator 段落**完成,不得绕过
+- Anti-hack model_based 审计若由 role-play 的 multigate-verifier 就地做(而非独立 Reviewer subagent),必须在 `anti_hack_log.jsonl` 标 `reason: "inline audit by {role-player}"`,置信度通常比独立审计低 ~0.03(CP-1 实测)
+- trailer.details 必须附加 `inline_role_play: true` 字段,让 top-level 能识别这是 inline 还是真正的 subagent 派发
+
+**若未来 harness 解锁 subagent 嵌套**:把 inline role-play 的 4 个内部段落改回 `Agent()` 派发即可,YAML trailer 语义等价,上游(campaign-orchestrator / top-level)无需改动。
+
 ## YAML Trailer 协议
 
 所有子 agent 产出文件**底部**写入 YAML trailer，派发者读取并决定下一步：
