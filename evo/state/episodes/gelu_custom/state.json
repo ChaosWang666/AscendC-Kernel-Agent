@@ -3,11 +3,16 @@
   "stage": "refining",
   "iter": 1,
   "feasible_found": true,
-  "b_t": 38.07,
+  "b_t": 37.86,
+  "b_t_measure_type": "median",
+  "b_t_cv": null,
+  "b_t_retrofit_note": "Retrofitted 2026-04-16 (P6 Item 1). Original value 38.07 was AVO v14 smoke-test baseline under mean measurement. The 37.86 is the median-canonical value for the known-good UB_TILE=16KB kernel (Phase 5 step_6 replay of deleted test-branch step_2). Use as reference baseline for the next campaign; first Stage 2 step will re-measure and overwrite.",
   "budget_remaining": 29,
   "last_failure_reason": null,
   "stage1_steps_used": 1,
   "P_x_size": 1,
   "initial_feasible_at_step": 0,
-  "updated_at": "2026-04-15T09:05:31.301496Z"
+  "consecutive_failure_count": 0,
+  "last_epsilon_burst_at_step": -1,
+  "updated_at": "2026-04-16T00:00:00Z"
 }
