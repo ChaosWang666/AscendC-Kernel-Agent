@@ -83,7 +83,7 @@ details:
 
 **合流规则**：派发者（stage agents 或 campaign-orchestrator）按 `status` 判断成功/失败，按 `next_action` 决定继续、早退出或上抛到上级。
 
-## 并行派发规则（同 AVO）
+## 并行派发规则
 
 - **独立 agent → 单消息多 `Agent()` 块**
 - **依赖 agent → 顺序调用**

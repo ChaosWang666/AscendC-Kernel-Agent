@@ -215,7 +215,9 @@ cd {CANDIDATE_DIR}/{OpName}Custom
 
 ## 判定标准（Stage-aware）
 
-**阶段识别**：从 `evolution/state.json` 读 `current_version`：
+> **适用上下文**：本节 Stage-aware 判定仅在 `main` 分支的 AVO 7 维审查模式下生效（由 AVO Architect 派发）。在 EVO 分支，reviewer 仅以 `prompt_mode=anti_hack_audit` 被 `multigate-verifier` 派发，跳过本节，直接按 `evo/docs/multi-gate-verification.md §Anti-Hacking-第二层` 的 JSON 输出契约执行。
+
+**阶段识别（仅 AVO）**：从 `evolution/state.json` 读 `current_version`：
 - `current_version < 0` 或判定文档显式声明 "seed/placeholder allowed" → **seed 阶段**
 - 其他情况 → **normal 阶段**
 
