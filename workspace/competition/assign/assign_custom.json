@@ -1,0 +1,27 @@
+[{
+    "op": "Assign",
+    "language": "cpp",
+    "input_desc": [
+        {
+            "name": "x",
+            "param_type": "required",
+            "format": ["ND"],
+            "type": ["fp16"]
+        },
+        {
+            "name": "other",
+            "param_type": "required",
+            "format": ["ND"],
+            "type": ["fp16"]
+        }
+    ],
+    "output_desc": [
+    ],
+    "attr": [
+        {
+            "name": "use_locking",
+            "param_type": "required",
+            "type": "bool"
+        }
+    ]
+}]

@@ -22,6 +22,12 @@ workspace/runs/*/test/CppExtension/*.egg-info/
 workspace/runs/*/test/__pycache__/
 **/__pycache__/
 
+# S8 competition — ignore build artifacts and zip intermediates
+workspace/competition/*/*/build_out/
+workspace/competition/combined/*/build_out/
+workspace/submissions/work/*_zip/
+workspace/submissions/op/
+
 # Python / build
 __pycache__/
 *.pyc
